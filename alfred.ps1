@@ -95,7 +95,6 @@ function UninstallTeams {
     Write-Host "Uninstalling Teams." -ForegroundColor Cyan
     Stop-Process -Name "ms-teams" -Force -ErrorAction SilentlyContinue
     try {
-        # $process = Start-Process -FilePath "$installer" -ArgumentList "/uninstall /s" -PassThru -Wait -ErrorAction STOP
         Get-AppxPackage MicrosoftTeams | Remove-AppxPackage
         Get-AppxPackage MSTeams | Remove-AppxPackage
         winget uninstall -h teams
