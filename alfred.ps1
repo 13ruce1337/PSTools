@@ -111,6 +111,15 @@ function ReinstallTeams {
     UninstallTeams
     InstallTeams
     Write-Host "Completed uninstalling and reinstalling Teams." -ForegroundColor Green
+}
+function TroubleshootNetwork {
+    Write-Host "Attempting basic network fixes." -ForegroundColor Cyan
+    ipconfig /release
+    ipconfig /renew
+    ipconfig /flushdns
+    ipconfig /registerdns
+    Write-Host "Finished basic networking fixes, below is the latest IP info:" -ForegroundColor Green
+    ipconfig /all 
 }   
 
 # Functions for initial input arguments
@@ -150,11 +159,20 @@ function Reinstall {
         }
     }
 }
+function Troubleshoot {
+    switch ($application)
+    {
+        "network" {
+            TroubleshootNetwork
+        }
+    }
+}
 
-# Initial arguments switch
+# Initial argument (verb) switch
 switch ($command)
 {
     "install" {Install}
     "uninstall" {Uninstall}
     "reinstall" {Reinstall}
+    "troubleshoot" {Troubleshoot}
 }
