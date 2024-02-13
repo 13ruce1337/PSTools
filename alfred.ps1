@@ -1,10 +1,23 @@
+<#
 #####
-# Alfred Pennyworth
-# Makes troubleshooting basic tasks easier.
-# Author: Trevor Cooper
-# Version: 0.1
-# Commmands - install, uninstall, reinstall, update
+Alfred Pennyworth
+Makes troubleshooting basic tasks easier.
 #####
+.AUTHOR
+    Trevor Cooper
+.VERSION
+    0.2
+.COMMANDS
+    install
+    uninstall
+    reinstall
+    update
+    troubleshoot
+    sd
+.APPLICATIONS
+    office
+    teams
+#>
 
 # This param must be at the top of the script. It defines the inputs.
 param($command, $application)
