@@ -216,7 +216,7 @@ function Update {
     
 }
 function SelfDestruct {
-
+    Remove-Item $PSCommandPath -Force 
 }
 # Initial argument (verb) switch
 switch ($command)
