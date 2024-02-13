@@ -2,6 +2,7 @@
 # Alfred Pennyworth
 # Makes troubleshooting basic tasks easier.
 # Author: Trevor Cooper
+# Version: 0.1
 # Commmands - install, uninstall, reinstall, update
 #####
 
@@ -45,15 +46,6 @@ function ODTExec {
     Start-Process -FilePath $env:TEMP\$odt -ArgumentList "/norestart /passive /quiet /extract:$env:TEMP" -Wait
     Start-Process "$env:TEMP\setup.exe" -ArgumentList "/configure $env:TEMP\$config_name" -Wait
 }
-function DownloadTeams {
-    
-    $teams_url = "https://teams.microsoft.com/downloads/desktopurl?env=production&plat=windows&arch=x64&managedInstaller=true&download=true"
-    $teams = "Teams_windows_x64.msi"
-    if (-Not (Test-Path -Path $env:TEMP\$teams)) {
-        Invoke-WebRequest -Uri $teams_url -OutFile $env:TEMP\$teams
-    }
-    return "$env:TEMP\$teams"
-}
 
 # Specific application functions
 # Office functions 
@@ -90,21 +82,22 @@ function ReinstallOffice {
 
 # Teams functions
 function InstallTeams {
+    $url = "https://go.microsoft.com/fwlink/?linkid=2196106&clcid=0x409&culture=en-us&country=us"
+    $installer = "teams_installer.msix"
     Write-Host "Installing Teams."
-    $installer = DownloadTeams
-    Start-Process -FilePath "$installer" -ArgumentList "/qn" -Wait
-    Write-Host "Completed installing Teams."
+    if (-not (Test-Path -Path $env:TEMP\$installer)) {
+        Invoke-WebRequest -uri $url -OutFile "$env:TEMP\$installer"
+    }
+    Add-AppPackage -path "$env:TEMP\$installer"
+    Write-Host "Completed installing Teams." -ForegroundColor Green
 }
 function UninstallTeams {
     Write-Host "Uninstalling Teams." -ForegroundColor Cyan
     Stop-Process -Name "ms-teams" -Force -ErrorAction SilentlyContinue
-    $installer = DownloadTeams
     try {
-        $process = Start-Process -FilePath "$installer" -ArgumentList "/uninstall /s" -PassThru -Wait -ErrorAction STOP
-        if ($process.ExitCode -ne 0)
-        {
-            Write-Error "Uninstallation failed with exit code  $($process.ExitCode)."
-        }
+        Get-AppxPackage MicrosoftTeams | Remove-AppxPackage
+        Get-AppxPackage MSTeams | Remove-AppxPackage
+        winget uninstall -h teams
     }
     catch {
         Write-Error $_.Exception.Message
@@ -117,7 +110,16 @@ function ReinstallTeams {
     Write-Host "Reinstalling Teams." -ForegroundColor Cyan
     UninstallTeams
     InstallTeams
-    Write-Host "Completed uninstalling and reinstalling Teams."
+    Write-Host "Completed uninstalling and reinstalling Teams." -ForegroundColor Green
+}
+function TroubleshootNetwork {
+    Write-Host "Attempting basic network fixes." -ForegroundColor Cyan
+    ipconfig /release
+    ipconfig /renew
+    ipconfig /flushdns
+    ipconfig /registerdns
+    Write-Host "Finished basic networking fixes, below is the latest IP info:" -ForegroundColor Green
+    ipconfig /all 
 }   
 
 # Functions for initial input arguments
@@ -157,11 +159,20 @@ function Reinstall {
         }
     }
 }
+function Troubleshoot {
+    switch ($application)
+    {
+        "network" {
+            TroubleshootNetwork
+        }
+    }
+}
 
-# Initial arguments switch
+# Initial argument (verb) switch
 switch ($command)
 {
     "install" {Install}
     "uninstall" {Uninstall}
     "reinstall" {Reinstall}
+    "troubleshoot" {Troubleshoot}
 }
