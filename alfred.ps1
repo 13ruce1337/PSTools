@@ -38,8 +38,10 @@ function ODTExec {
     $processes | Invoke-CimMethod -MethodName "Terminate"
     Write-Host "Creating configuration file."
     $config | New-Item -Path $env:TEMP -Name $config_name -Force
-    Write-Host "Downloading ODT from Microsoft."
-    Invoke-WebRequest -Uri $odt_url -OutFile $env:TEMP\$odt
+    if (-not (Test-Path -Path $env:TEMP\$odt)) {
+        Write-Host "Downloading ODT from Microsoft."
+        Invoke-WebRequest -Uri $odt_url -OutFile $env:TEMP\$odt
+    } 
     Write-Host "Extracting the ODT then running with the following config:"
     Write-Host $config
     Write-Host "This may take some time..." -ForegroundColor Yellow
