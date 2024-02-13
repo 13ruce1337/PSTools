@@ -125,6 +125,17 @@ function TroubleshootNetwork {
     Write-Host "Finished basic networking fixes, below is the latest IP info:" -ForegroundColor Green
     ipconfig /all 
 }
+function TroubleshootWindows {
+    Write-Host "Attempting basic Windows fixes." -ForegroundColor Cyan
+    UpdateWindows
+    Write-Host "Optimizing the OS volume."
+    Optimize-Volume -DriveLetter C -Analyze -Confirm -Defrag -ReTrim -SlabConsolidate -Verbose
+    Write-Host "Cleaning up the OS image."
+    DISM /Online /Cleanup-Image /RestoreHealth
+    Write-Host "Running System File Checker."
+    sfc /scannow
+    Write-Host "Finished basic Windows fixes." -ForegroundColor Green
+}
 
 # Update functions
 function UpdateWindows {
@@ -190,6 +201,9 @@ function Troubleshoot {
         "network" {
             TroubleshootNetwork
         }
+        "windows" {
+            TroubleshootWindows
+        }
     }
 }
 function Update {
@@ -201,6 +215,9 @@ function Update {
     }
     
 }
+function SelfDestruct {
+
+}
 # Initial argument (verb) switch
 switch ($command)
 {
@@ -209,4 +226,5 @@ switch ($command)
     "reinstall" {Reinstall}
     "troubleshoot" {Troubleshoot}
     "update" {Update}
+    "sd" {SelfDestruct}
 }
