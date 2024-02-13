@@ -114,6 +114,8 @@ function ReinstallTeams {
     InstallTeams
     Write-Host "Completed uninstalling and reinstalling Teams." -ForegroundColor Green
 }
+
+# Troubleshooting functions
 function TroubleshootNetwork {
     Write-Host "Attempting basic network fixes." -ForegroundColor Cyan
     ipconfig /release
@@ -122,7 +124,28 @@ function TroubleshootNetwork {
     ipconfig /registerdns
     Write-Host "Finished basic networking fixes, below is the latest IP info:" -ForegroundColor Green
     ipconfig /all 
-}   
+}
+
+# Update functions
+function UpdateWindows {
+    Write-Host "Updating Windows." -ForegroundColor Cyan
+    if (-not (Get-PackageProvider -ListAvailable -Name "NuGet" -ErrorAction "Ignore")) {
+        Write-Host "NuGet is not installed, installing now..." -ForegroundColor Red
+		Install-PackageProvider -Name "NuGet" -Force
+	}
+	if (-not (Get-InstalledModule -Name "PSWindowsUpdate" -ErrorAction "Ignore")) {
+    	Write-Host "PSWindowsUpdate is not installed, installing now..." -ForegroundColor Red
+	    Install-Module -Name "PSWindowsUpdate" -Force
+    }
+    Write-Host "Checking for Windows updates..."
+    if (Get-WindowsUpdate) {
+    	Write-Host "Installing updates..."
+        Get-WindowsUpdate -AcceptAll -Download -Install
+        Write-Host "Updates have been installed. You should reboot the system." -ForegroundColor Green
+    } else {
+        Write-Host "Windows is up to date." -ForegroundColor Green
+    }
+}
 
 # Functions for initial input arguments
 function Install {
@@ -169,7 +192,15 @@ function Troubleshoot {
         }
     }
 }
-
+function Update {
+    switch ($application) {
+        "windows" { 
+            UpdateWindows
+         }
+        Default {}
+    }
+    
+}
 # Initial argument (verb) switch
 switch ($command)
 {
@@ -177,4 +208,5 @@ switch ($command)
     "uninstall" {Uninstall}
     "reinstall" {Reinstall}
     "troubleshoot" {Troubleshoot}
+    "update" {Update}
 }
