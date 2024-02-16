@@ -1,10 +1,24 @@
+<#
 #####
-# Alfred Pennyworth
-# Makes troubleshooting basic tasks easier.
-# Author: Trevor Cooper
-# Version: 0.1
-# Commmands - install, uninstall, reinstall, update
+Alfred Pennyworth
+Makes troubleshooting basic tasks easier.
+Ex) .\alfred install office
 #####
+.AUTHOR
+    Trevor Cooper
+.VERSION
+    0.2
+.COMMANDS
+    install
+    uninstall
+    reinstall
+    update
+    troubleshoot
+    sd
+.APPLICATIONS
+    office
+    teams
+#>
 
 # This param must be at the top of the script. It defines the inputs.
 param($command, $application)
@@ -38,8 +52,10 @@ function ODTExec {
     $processes | Invoke-CimMethod -MethodName "Terminate"
     Write-Host "Creating configuration file."
     $config | New-Item -Path $env:TEMP -Name $config_name -Force
-    Write-Host "Downloading ODT from Microsoft."
-    Invoke-WebRequest -Uri $odt_url -OutFile $env:TEMP\$odt
+    if (-not (Test-Path -Path $env:TEMP\$odt)) {
+        Write-Host "Downloading ODT from Microsoft."
+        Invoke-WebRequest -Uri $odt_url -OutFile $env:TEMP\$odt
+    } 
     Write-Host "Extracting the ODT then running with the following config:"
     Write-Host $config
     Write-Host "This may take some time..." -ForegroundColor Yellow
@@ -112,6 +128,8 @@ function ReinstallTeams {
     InstallTeams
     Write-Host "Completed uninstalling and reinstalling Teams." -ForegroundColor Green
 }
+
+# Troubleshooting functions
 function TroubleshootNetwork {
     Write-Host "Attempting basic network fixes." -ForegroundColor Cyan
     ipconfig /release
@@ -120,7 +138,39 @@ function TroubleshootNetwork {
     ipconfig /registerdns
     Write-Host "Finished basic networking fixes, below is the latest IP info:" -ForegroundColor Green
     ipconfig /all 
-}   
+}
+function TroubleshootWindows {
+    Write-Host "Attempting basic Windows fixes." -ForegroundColor Cyan
+    UpdateWindows
+    Write-Host "Optimizing the OS volume."
+    Optimize-Volume -DriveLetter C -Analyze -Confirm -Defrag -ReTrim -SlabConsolidate -Verbose
+    Write-Host "Cleaning up the OS image."
+    DISM /Online /Cleanup-Image /RestoreHealth
+    Write-Host "Running System File Checker."
+    sfc /scannow
+    Write-Host "Finished basic Windows fixes." -ForegroundColor Green
+}
+
+# Update functions
+function UpdateWindows {
+    Write-Host "Updating Windows." -ForegroundColor Cyan
+    if (-not (Get-PackageProvider -ListAvailable -Name "NuGet" -ErrorAction "Ignore")) {
+        Write-Host "NuGet is not installed, installing now..." -ForegroundColor Red
+		Install-PackageProvider -Name "NuGet" -Force
+	}
+	if (-not (Get-InstalledModule -Name "PSWindowsUpdate" -ErrorAction "Ignore")) {
+    	Write-Host "PSWindowsUpdate is not installed, installing now..." -ForegroundColor Red
+	    Install-Module -Name "PSWindowsUpdate" -Force
+    }
+    Write-Host "Checking for Windows updates..."
+    if (Get-WindowsUpdate) {
+    	Write-Host "Installing updates..."
+        Get-WindowsUpdate -AcceptAll -Download -Install
+        Write-Host "Updates have been installed. You should reboot the system." -ForegroundColor Green
+    } else {
+        Write-Host "Windows is up to date." -ForegroundColor Green
+    }
+}
 
 # Functions for initial input arguments
 function Install {
@@ -165,9 +215,23 @@ function Troubleshoot {
         "network" {
             TroubleshootNetwork
         }
+        "windows" {
+            TroubleshootWindows
+        }
     }
 }
-
+function Update {
+    switch ($application) {
+        "windows" { 
+            UpdateWindows
+         }
+        Default {}
+    }
+    
+}
+function SelfDestruct {
+    Remove-Item $PSCommandPath -Force 
+}
 # Initial argument (verb) switch
 switch ($command)
 {
@@ -175,4 +239,6 @@ switch ($command)
     "uninstall" {Uninstall}
     "reinstall" {Reinstall}
     "troubleshoot" {Troubleshoot}
+    "update" {Update}
+    "sd" {SelfDestruct}
 }
