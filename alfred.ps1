@@ -96,6 +96,35 @@ function ReinstallOffice {
     Write-Host "Completed the uninstallation and reinstallation process for Office applications." -ForegroundColor Green
 }
 
+# Projects functions
+function InstallVisio {
+    $config = '<Configuration> 
+    <Add OfficeClientEdition="64" Channel="Current">
+        <Product ID="VisioPro2021Retail" > 
+            <Language ID="en-us" />        
+        </Product> 
+    </Add> 
+    <Display Level="None" AcceptEULA="TRUE" />
+</Configuration>'
+
+    Write-Host "Installing Visio." -ForegroundColor Cyan
+    ODTExec $config
+    Write-Host "Visio has been installed." -ForegroundColor Green
+}
+function UninstallVisio {
+    $config = '<Configuration>
+    <Remove All="FALSE">
+        <Product ID="VisioPro2021Retail" >
+        </Product>
+    </Remove>
+    <Display Level="None" AcceptEULA="TRUE" />
+</Configuration>'
+
+    Write-Host "Uninstalling Visio." -ForegroundColor Cyan
+    ODTExec $config
+    Write-Host "Completed Visio removal." -ForegroundColor Green
+}
+
 # Teams functions
 function InstallTeams {
     $url = "https://go.microsoft.com/fwlink/?linkid=2196106&clcid=0x409&culture=en-us&country=us"
@@ -182,6 +211,12 @@ function Install {
         "teams" {
             InstallTeams
         }
+        "visio" {
+            InstallVisio
+        }
+        default {
+            Write-Host "I do not have the ability to install that application." -ForegroundColor Red
+        }
     }
 }
 function Uninstall {
@@ -193,8 +228,11 @@ function Uninstall {
         "teams" {
             UninstallTeams
         }
+        "visio" {
+            UninstallVisio
+        }
         Default {
-            UninstallApplication $application
+            Write-Host "I do not have a way to uninstall that application." -ForegroundColor Red
         }
     }
 }

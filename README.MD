@@ -14,3 +14,4 @@ Example `.\alfred.ps1 troubleshoot windows`
 ## APPLICATIONS
 - office
 - teams
+- visio
