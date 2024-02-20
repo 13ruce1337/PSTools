@@ -18,6 +18,7 @@ Ex) .\alfred install office
 .APPLICATIONS
     office
     teams
+    visio
 #>
 
 # This param must be at the top of the script. It defines the inputs.
