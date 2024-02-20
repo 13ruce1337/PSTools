@@ -1,5 +1,5 @@
 # Alfred Pennyworth
-Makes troubleshooting basic tasks easier.
+Makes troubleshooting basic tasks easier.\
 Version 0.2
 **Must be ran as administrator**
 
