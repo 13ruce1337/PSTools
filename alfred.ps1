@@ -1,13 +1,12 @@
 <#
 #####
 Alfred Pennyworth
-Makes troubleshooting basic tasks easier.
 Ex) .\alfred install office
 #####
 .AUTHOR
     Trevor Cooper
 .VERSION
-    0.2
+    0.3
 .COMMANDS
     install
     uninstall
@@ -18,10 +17,14 @@ Ex) .\alfred install office
 .APPLICATIONS
     office
     teams
+    visio
+    adobedc
 #>
 
 # This param must be at the top of the script. It defines the inputs.
 param($command, $application)
+
+$ProgressPreference = 'SilentlyContinue'
 
 # Helper functions
 function UninstallApplication {
@@ -32,13 +35,6 @@ function UninstallApplication {
     foreach ($app in $apps) {
         $App.Uninstall()
     }
-}
-function InstallMSI {
-    param($msi)
-
-    Write-Host "Installing $msi" -ForegroundColor Yellow
-    Start-Process msiexec -ArgumentList "/i $msi /qn" -Wait
-    Write-Host "Installation complete." -ForegroundColor Green
 }
 function ODTExec {
     param($config)
@@ -53,7 +49,7 @@ function ODTExec {
     Write-Host "Creating configuration file."
     $config | New-Item -Path $env:TEMP -Name $config_name -Force
     if (-not (Test-Path -Path $env:TEMP\$odt)) {
-        Write-Host "Downloading ODT from Microsoft."
+        Write-Host "Downloading ODT from Microsoft..."
         Invoke-WebRequest -Uri $odt_url -OutFile $env:TEMP\$odt
     } 
     Write-Host "Extracting the ODT then running with the following config:"
@@ -61,6 +57,16 @@ function ODTExec {
     Write-Host "This may take some time..." -ForegroundColor Yellow
     Start-Process -FilePath $env:TEMP\$odt -ArgumentList "/norestart /passive /quiet /extract:$env:TEMP" -Wait
     Start-Process "$env:TEMP\setup.exe" -ArgumentList "/configure $env:TEMP\$config_name" -Wait
+}
+function DownloadAdobeDC {
+    $url = "https://trials.adobe.com/AdobeProducts/APRO/Acrobat_HelpX/win32/Acrobat_DC_Web_x64_WWMUI.zip"
+    $installer = "Acrobat_DC_Web_x64_WWMUI.zip"
+    if (-not (Test-Path -Path $env:TEMP\$installer)) {
+        Write-Host "Downloading Adobe STD..."
+        Invoke-WebRequest -Uri $url -OutFile $env:TEMP\$installer
+        Expand-Archive -Path $env:TEMP\$installer -DestinationPath $env:TEMP\ -Force
+    }
+    return "$env:temp\Adobe Acrobat\AcroPro.msi"
 }
 
 # Specific application functions
@@ -96,12 +102,42 @@ function ReinstallOffice {
     Write-Host "Completed the uninstallation and reinstallation process for Office applications." -ForegroundColor Green
 }
 
+# Projects functions
+function InstallVisio {
+    $config = '<Configuration> 
+    <Add OfficeClientEdition="64" Channel="Current">
+        <Product ID="VisioPro2021Retail" > 
+            <Language ID="en-us" />        
+        </Product> 
+    </Add> 
+    <Display Level="None" AcceptEULA="TRUE" />
+</Configuration>'
+
+    Write-Host "Installing Visio." -ForegroundColor Cyan
+    ODTExec $config
+    Write-Host "Visio has been installed." -ForegroundColor Green
+}
+function UninstallVisio {
+    $config = '<Configuration>
+    <Remove All="FALSE">
+        <Product ID="VisioPro2021Retail" >
+        </Product>
+    </Remove>
+    <Display Level="None" AcceptEULA="TRUE" />
+</Configuration>'
+
+    Write-Host "Uninstalling Visio." -ForegroundColor Cyan
+    ODTExec $config
+    Write-Host "Completed Visio removal." -ForegroundColor Green
+}
+
 # Teams functions
 function InstallTeams {
     $url = "https://go.microsoft.com/fwlink/?linkid=2196106&clcid=0x409&culture=en-us&country=us"
     $installer = "teams_installer.msix"
     Write-Host "Installing Teams."
     if (-not (Test-Path -Path $env:TEMP\$installer)) {
+        Write-Host "Downloading Teams..."
         Invoke-WebRequest -uri $url -OutFile "$env:TEMP\$installer"
     }
     Add-AppPackage -path "$env:TEMP\$installer"
@@ -113,7 +149,6 @@ function UninstallTeams {
     try {
         Get-AppxPackage MicrosoftTeams | Remove-AppxPackage
         Get-AppxPackage MSTeams | Remove-AppxPackage
-        winget uninstall -h teams
     }
     catch {
         Write-Error $_.Exception.Message
@@ -127,6 +162,30 @@ function ReinstallTeams {
     UninstallTeams
     InstallTeams
     Write-Host "Completed uninstalling and reinstalling Teams." -ForegroundColor Green
+}
+
+# Adobe functions
+function InstallAdobeDC {
+    Write-Host "Installing Adobe DC." -ForegroundColor Cyan
+    $msi = DownloadAdobeDC
+    try {
+        Start-Process "msiexec.exe" -Argument "/i `"$msi`"  /qn" -Verbose -Wait
+    }
+    catch {
+        Write-Host $_
+    }
+    Write-Host "Completed installing Adobe DC." -ForegroundColor Green
+}
+function UninstallAdobeDC {
+    Write-Host "Uninstalling Adobe DC." -ForegroundColor Cyan
+    $msi = DownloadAdobeDC
+    try {
+        Start-process "msiexec.exe" -Argument "/x `"$msi`" /qn" -Verbose -Wait
+    }
+    catch {
+        Write-Host $_
+    }
+    Write-Host "Adobe DC has been uninstalled." -ForegroundColor Green
 }
 
 # Troubleshooting functions
@@ -182,6 +241,15 @@ function Install {
         "teams" {
             InstallTeams
         }
+        "visio" {
+            InstallVisio
+        }
+        "adobedc" {
+            InstallAdobeDC
+        }
+        default {
+            Write-Host "I do not have the ability to install that application." -ForegroundColor Red
+        }
     }
 }
 function Uninstall {
@@ -193,8 +261,14 @@ function Uninstall {
         "teams" {
             UninstallTeams
         }
+        "visio" {
+            UninstallVisio
+        }
+        "adobedc" {
+            UninstallAdobeDC
+        }
         Default {
-            UninstallApplication $application
+            Write-Host "I do not have a way to uninstall that application." -ForegroundColor Red
         }
     }
 }
