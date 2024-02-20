@@ -2,7 +2,10 @@
 ### Makes troubleshooting basic tasks easier.
 ### Version 0.2
 
-Example `.\alfred.ps1 troubleshoot windows`
+==Must be ran as administrator.==
+
+`Invoke-WebRequest https://raw.githubusercontent.com/13ruce1337/PSTools/main/alfred.ps1 -OutFile "$env:TEMP\alfred.ps1"`
+`start-process powershell.exe -Argumentlist "-ExecutionPolicy Bypass", "-File $env:TEMP\alfred.ps1", "install teams" -NoNewWindow`
 
 ## COMMANDS
 - install
