@@ -1,7 +1,6 @@
 <#
 #####
 Alfred Pennyworth
-Makes troubleshooting basic tasks easier.
 Ex) .\alfred install office
 #####
 .AUTHOR
