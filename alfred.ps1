@@ -1,24 +1,33 @@
 <#
-#####
+.SYNOPSIS
 Alfred Pennyworth
-Ex) .\alfred install office
-#####
-.AUTHOR
-    Trevor Cooper
-.VERSION
-    0.3
-.COMMANDS
+
+.DESCRIPTION
+VERSION 0.3
+
+.INPUTS
+COMMANDS
     install
     uninstall
     reinstall
     update
     troubleshoot
     sd
-.APPLICATIONS
+APPLICATIONS
     office
     teams
     visio
     adobedc
+
+.OUTPUTS
+This command currently doesn't output any data but will display status.
+
+.EXAMPLE
+.\alfred install office
+
+.LINK
+https://github.com/13ruce1337/pstools
+
 #>
 
 # This param must be at the top of the script. It defines the inputs.
