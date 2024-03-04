@@ -18,6 +18,7 @@ APPLICATIONS
     office
     teams
     visio
+    project
     adobedc
 
 .OUTPUTS
