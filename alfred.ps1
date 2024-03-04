@@ -10,6 +10,7 @@ COMMANDS
     install
     uninstall
     reinstall
+    nuke
     update
     troubleshoot
     sd
@@ -67,6 +68,37 @@ function ODTExec {
     Start-Process -FilePath $env:TEMP\$odt -ArgumentList "/norestart /passive /quiet /extract:$env:TEMP" -Wait
     Start-Process "$env:TEMP\setup.exe" -ArgumentList "/configure $env:TEMP\$config_name" -Wait
 }
+function ODTInstallConfig {
+    param($product)
+
+    $config = '<Configuration> 
+    <Add OfficeClientEdition="64" Channel="Current">
+        <Product ID="'+$product+'" > 
+            <Language ID="en-us" />        
+        </Product> 
+    </Add> 
+    <Display Level="None" AcceptEULA="TRUE" />
+</Configuration>'
+
+    Write-Host "Installing $product." -ForegroundColor Cyan
+    ODTExec $config
+    Write-Host "$product has been installed." -ForegroundColor Green
+}
+function ODTUninstallConfig {
+    param($product)
+
+    $config = '<Configuration>
+    <Remove All="FALSE">
+        <Product ID="'+$product+'" >
+        </Product>
+    </Remove>
+    <Display Level="None" AcceptEULA="TRUE" />
+</Configuration>'
+
+    Write-Host "Uninstalling $product." -ForegroundColor Cyan
+    ODTExec $config
+    Write-Host "$product has been removed." -ForegroundColor Green
+}
 function DownloadAdobeDC {
     $url = "https://trials.adobe.com/AdobeProducts/APRO/Acrobat_HelpX/win32/Acrobat_DC_Web_x64_WWMUI.zip"
     $installer = "Acrobat_DC_Web_x64_WWMUI.zip"
@@ -81,26 +113,18 @@ function DownloadAdobeDC {
 # Specific application functions
 # Office functions 
 function InstallOffice {
-    $config = '<Configuration> 
-    <Add OfficeClientEdition="64" Channel="Current">
-        <Product ID="O365ProPlusRetail" > 
-            <Language ID="en-us" />        
-        </Product> 
-    </Add> 
-    <Display Level="None" AcceptEULA="TRUE" />
-</Configuration>'
-
-    Write-Host "Installing Office applications." -ForegroundColor Cyan
-    ODTExec $config
-    Write-Host "Office Applications have been installed." -ForegroundColor Green
+    ODTInstallConfig("O365ProPlusRetail")
 }
 function UninstallOffice {
+    ODTUninstallConfig("O365ProPlusRetail")
+}
+function NukeOffice {
     $config = '<Configuration>
     <Remove All="TRUE"/>
     <Display Level="None" AcceptEULA="TRUE" />
 </Configuration>'
 
-    Write-Host "Uninstalling Office applications." -ForegroundColor Cyan
+    Write-Host "Uninstalling all Office applications." -ForegroundColor Cyan
     ODTExec $config
     Write-Host "Completed Office removal." -ForegroundColor Green
 }
@@ -111,33 +135,20 @@ function ReinstallOffice {
     Write-Host "Completed the uninstallation and reinstallation process for Office applications." -ForegroundColor Green
 }
 
-# Projects functions
+# Visio functions
 function InstallVisio {
-    $config = '<Configuration> 
-    <Add OfficeClientEdition="64" Channel="Current">
-        <Product ID="VisioPro2021Retail" > 
-            <Language ID="en-us" />        
-        </Product> 
-    </Add> 
-    <Display Level="None" AcceptEULA="TRUE" />
-</Configuration>'
-
-    Write-Host "Installing Visio." -ForegroundColor Cyan
-    ODTExec $config
-    Write-Host "Visio has been installed." -ForegroundColor Green
+    ODTInstallConfig("VisioPro2021Retail")
 }
 function UninstallVisio {
-    $config = '<Configuration>
-    <Remove All="FALSE">
-        <Product ID="VisioPro2021Retail" >
-        </Product>
-    </Remove>
-    <Display Level="None" AcceptEULA="TRUE" />
-</Configuration>'
+    ODTUninstallConfig("VisioPro2021Retail")
+}
 
-    Write-Host "Uninstalling Visio." -ForegroundColor Cyan
-    ODTExec $config
-    Write-Host "Completed Visio removal." -ForegroundColor Green
+# Project functions
+function InstallProject {
+    ODTInstallConfig("ProjectPro2021Retail")
+}
+function UninstallProject {
+    ODTUninstallConfig("ProjectPro2021Retail")
 }
 
 # Teams functions
@@ -253,6 +264,9 @@ function Install {
         "visio" {
             InstallVisio
         }
+        "project" {
+            InstallProject
+        }
         "adobedc" {
             InstallAdobeDC
         }
@@ -273,6 +287,9 @@ function Uninstall {
         "visio" {
             UninstallVisio
         }
+        "project" {
+            UninstallProject
+        }
         "adobedc" {
             UninstallAdobeDC
         }
@@ -289,6 +306,14 @@ function Reinstall {
         }
         "teams" {
             ReinstallTeams
+        }
+    }
+}
+function Nuke {
+    switch ($application)
+    {
+        "office" {
+            NukeOffice
         }
     }
 }
@@ -321,6 +346,7 @@ switch ($command)
     "install" {Install}
     "uninstall" {Uninstall}
     "reinstall" {Reinstall}
+    "nuke" {Nuke}
     "troubleshoot" {Troubleshoot}
     "update" {Update}
     "sd" {SelfDestruct}

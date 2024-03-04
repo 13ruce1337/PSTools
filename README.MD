@@ -8,6 +8,7 @@
 - install
 - uninstall
 - reinstall
+- nuke
 - update
 - troubleshoot
 - sd
