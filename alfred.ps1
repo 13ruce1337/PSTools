@@ -38,6 +38,10 @@ param($command, $application)
 $ProgressPreference = 'SilentlyContinue'
 
 # Helper functions
+function AdminCheck {
+    $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    return $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
 function UninstallApplication {
     param($name)
 
@@ -154,6 +158,10 @@ function UninstallProject {
 
 # Teams functions
 function InstallTeams {
+    if (AdminCheck) {
+        Write-Host "This specific task cannot be done as the administrator" -ForegroundColor Red
+        return
+    }
     $url = "https://go.microsoft.com/fwlink/?linkid=2196106&clcid=0x409&culture=en-us&country=us"
     $installer = "teams_installer.msix"
     Write-Host "Installing Teams."
@@ -165,6 +173,10 @@ function InstallTeams {
     Write-Host "Completed installing Teams." -ForegroundColor Green
 }
 function UninstallTeams {
+    if (AdminCheck) {
+        Write-Host "This specific task cannot be done as the administrator" -ForegroundColor Red
+        return
+    }
     Write-Host "Uninstalling Teams." -ForegroundColor Cyan
     Stop-Process -Name "ms-teams" -Force -ErrorAction SilentlyContinue
     try {
@@ -179,6 +191,10 @@ function UninstallTeams {
     Write-Host "Completed uninstalling Teams." -ForegroundColor Green
 }
 function ReinstallTeams {
+    if (AdminCheck) {
+        Write-Host "This specific task cannot be done as the administrator" -ForegroundColor Red
+        return
+    }
     Write-Host "Reinstalling Teams." -ForegroundColor Cyan
     UninstallTeams
     InstallTeams
