@@ -15,5 +15,6 @@
 ## APPLICATIONS
 - office
 - teams
+- project
 - visio
 - adobedc
