@@ -17,4 +17,5 @@
 - teams
 - project
 - visio
+- onenote
 - adobedc
