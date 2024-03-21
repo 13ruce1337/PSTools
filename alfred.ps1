@@ -19,6 +19,7 @@ APPLICATIONS
     teams
     visio
     project
+    onenote
     adobedc
 
 .OUTPUTS
@@ -29,7 +30,6 @@ This command currently doesn't output any data but will display status.
 
 .LINK
 https://github.com/13ruce1337/pstools
-
 #>
 
 # This param must be at the top of the script. It defines the inputs.
@@ -147,6 +147,10 @@ function InstallVisio {
 function UninstallVisio {
     ODTUninstallConfig("VisioPro2021Retail")
 }
+function ReinstallVisio {
+    UninstallVisio
+    InstallVisio
+}
 
 # Project functions
 function InstallProject {
@@ -154,6 +158,22 @@ function InstallProject {
 }
 function UninstallProject {
     ODTUninstallConfig("ProjectPro2021Retail")
+}
+function ReinstallProject {
+    UninstallProject
+    InstallProject
+}
+
+# OneNote functions
+function InstallOneNote {
+    ODTInstallConfig("OneNoteRetail")
+}
+function UninstallOneNote {
+    ODTUninstallConfig("OneNoteRetail")
+}
+function ReinstallOneNote {
+    UninstallOneNote
+    InstallOneNote
 }
 
 # Teams functions
@@ -224,6 +244,10 @@ function UninstallAdobeDC {
     }
     Write-Host "Adobe DC has been uninstalled." -ForegroundColor Green
 }
+function ReinstallAdobeDC {
+    UninstallAdobeDC
+    InstallAdobeDC
+}
 
 # Troubleshooting functions
 function TroubleshootNetwork {
@@ -284,6 +308,9 @@ function Install {
         "project" {
             InstallProject
         }
+        "onenote" {
+            InstallOneNote
+        }
         "adobedc" {
             InstallAdobeDC
         }
@@ -307,6 +334,9 @@ function Uninstall {
         "project" {
             UninstallProject
         }
+        "onenote" {
+            UninstallOneNote
+        }
         "adobedc" {
             UninstallAdobeDC
         }
@@ -323,6 +353,18 @@ function Reinstall {
         }
         "teams" {
             ReinstallTeams
+        }
+        "onenote" {
+            ReinstallOneNote
+        }
+        "project" {
+            ReinstallProject
+        }
+        "visio" {
+            ReinstallVisio
+        }
+        "adobedc" {
+            ReinstallAdobeDC
         }
     }
 }
