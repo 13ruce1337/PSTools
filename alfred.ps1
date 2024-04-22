@@ -265,7 +265,7 @@ function TroubleshootWindows {
     Write-Host "Optimizing the OS volume."
     Optimize-Volume -DriveLetter C -Analyze -Confirm -Defrag -ReTrim -SlabConsolidate -Verbose
     Write-Host "Cleaning up the OS image."
-    DISM /Online /Cleanup-Image /RestoreHealth
+    DISM /Online /Cleanup-Image /RestoreHealth /startcomponentcleanup
     Write-Host "Running System File Checker."
     sfc /scannow
     Write-Host "Finished basic Windows fixes." -ForegroundColor Green
