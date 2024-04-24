@@ -18,6 +18,7 @@
 - project
 - visio
 - onenote
+- onedrive
 - adobedc
 
 ## Roadmap
