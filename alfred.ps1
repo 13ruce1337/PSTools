@@ -30,7 +30,8 @@ This command currently doesn't output any data but will display status.
 .\alfred install office
 
 .LINK
-https://github.com/13ruce1337/pstools
+Repo - https://github.com/13ruce1337/pstools
+Product Codes - https://learn.microsoft.com/en-us/microsoft-365/troubleshoot/installation/product-ids-supported-office-deployment-click-to-run
 #>
 
 # This param must be at the top of the script. It defines the inputs.
@@ -187,6 +188,30 @@ function UninstallOneNote {
 function ReinstallOneNote {
     UninstallOneNote
     InstallOneNote
+}
+
+# Excel functions
+function InstallExcel {
+    ODTInstallConfig("Excel2019Retail")
+}
+function UninstallExcel {
+    ODTUninstallConfig("Excel2019Retail")
+}
+function ReinstallExcel {
+    UninstallExcel
+    InstallExcel
+}
+
+# Outlook functions
+function InstallOutlook {
+    ODTInstallConfig("OutlookRetail")
+}
+function UninstallOutlook {
+    ODTUninstallConfig("OutlookRetail")
+}
+function ReinstallOutlook {
+    UninstallOutlook
+    InstallOutlook
 }
 
 # Teams functions
@@ -358,6 +383,12 @@ function Install {
         "onenote" {
             InstallOneNote
         }
+        "excel" {
+            InstallExcel
+        }
+        "outlook" {
+            InstallOutlook
+        }
         "adobedc" {
             InstallAdobeDC
         }
@@ -387,6 +418,12 @@ function Uninstall {
         "onenote" {
             UninstallOneNote
         }
+        "excel" {
+            UninstallExcel
+        }
+        "outlook" {
+            UninstallOutlook
+        }
         "adobedc" {
             UninstallAdobeDC
         }
@@ -415,6 +452,12 @@ function Reinstall {
         }
         "visio" {
             ReinstallVisio
+        }
+        "excel" {
+            ReinstallExcel
+        }
+        "outlook" {
+            ReinstallOutlook
         }
         "adobedc" {
             ReinstallAdobeDC
