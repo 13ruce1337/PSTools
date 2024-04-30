@@ -267,6 +267,10 @@ function InstallOneDrive {
         "/install"
     )
 
+    if (AdminCheck) {
+        Write-Host "This specific task cannot be done as the administrator" -ForegroundColor Red
+        return
+    }
     Write-Host "Installing OneDrive."
     try {
         Start-Process $private:exe -ArgumentList $private:iargs -PassThru -Verbose
