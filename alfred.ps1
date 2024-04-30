@@ -21,6 +21,7 @@ APPLICATIONS
     project
     onenote
     adobedc
+    onedrive
 
 .OUTPUTS
 This command currently doesn't output any data but will display status.
@@ -29,7 +30,8 @@ This command currently doesn't output any data but will display status.
 .\alfred install office
 
 .LINK
-https://github.com/13ruce1337/pstools
+Repo - https://github.com/13ruce1337/pstools
+Product Codes - https://learn.microsoft.com/en-us/microsoft-365/troubleshoot/installation/product-ids-supported-office-deployment-click-to-run
 #>
 
 # This param must be at the top of the script. It defines the inputs.
@@ -105,14 +107,26 @@ function ODTUninstallConfig {
     Write-Host "$product has been removed." -ForegroundColor Green
 }
 function DownloadAdobeDC {
-    $url = "https://trials.adobe.com/AdobeProducts/APRO/Acrobat_HelpX/win32/Acrobat_DC_Web_x64_WWMUI.zip"
-    $installer = "Acrobat_DC_Web_x64_WWMUI.zip"
-    if (-not (Test-Path -Path $env:TEMP\$installer)) {
+    [string]$private:url = "https://trials.adobe.com/AdobeProducts/APRO/Acrobat_HelpX/win32/Acrobat_DC_Web_x64_WWMUI.zip"
+    [string]$private:installer = "Acrobat_DC_Web_x64_WWMUI.zip"
+    
+    if (-not (Test-Path -Path $env:TEMP\$private:installer)) {
         Write-Host "Downloading Adobe STD..."
-        Invoke-WebRequest -Uri $url -OutFile $env:TEMP\$installer
-        Expand-Archive -Path $env:TEMP\$installer -DestinationPath $env:TEMP\ -Force
+        Invoke-WebRequest -Uri $private:url -OutFile $env:TEMP\$private:installer
+        Expand-Archive -Path $env:TEMP\$private:installer -DestinationPath $env:TEMP\ -Force
     }
     return "$env:temp\Adobe Acrobat\AcroPro.msi"
+}
+
+function DownloadOneDrive {
+    [string]$private:url = "https://oneclient.sfx.ms/Win/Installers/24.070.0407.0003/amd64/OneDriveSetup.exe"
+    [string]$private:installer = "OneDriveSetup.exe"
+
+    if (-not (Test-path -Path $env:TEMP\$private:installer)) {
+        Write-Host "Downloading OneDrive..."
+        Invoke-WebRequest -Uri $private:url -OutFile $env:TEMP\$private:installer
+    }
+    return "$env:temp\$private:installer"
 }
 
 # Specific application functions
@@ -176,6 +190,30 @@ function ReinstallOneNote {
     InstallOneNote
 }
 
+# Excel functions
+function InstallExcel {
+    ODTInstallConfig("Excel2019Retail")
+}
+function UninstallExcel {
+    ODTUninstallConfig("Excel2019Retail")
+}
+function ReinstallExcel {
+    UninstallExcel
+    InstallExcel
+}
+
+# Outlook functions
+function InstallOutlook {
+    ODTInstallConfig("OutlookRetail")
+}
+function UninstallOutlook {
+    ODTUninstallConfig("OutlookRetail")
+}
+function ReinstallOutlook {
+    UninstallOutlook
+    InstallOutlook
+}
+
 # Teams functions
 function InstallTeams {
     if (AdminCheck) {
@@ -204,8 +242,8 @@ function UninstallTeams {
         Get-AppxPackage MSTeams | Remove-AppxPackage
     }
     catch {
-        Write-Error $_.Exception.Message
-        Exit
+        Write-Error $_.Exception.Message -ForegroundColor Red
+        Exit 1
     }
     UninstallApplication "Teams Machine-Wide Installer"
     Write-Host "Completed uninstalling Teams." -ForegroundColor Green
@@ -221,6 +259,38 @@ function ReinstallTeams {
     Write-Host "Completed uninstalling and reinstalling Teams." -ForegroundColor Green
 }
 
+# OneDrive functions
+function InstallOneDrive {
+    [string]$private:exe = DownloadOneDrive
+    [array]$private:iargs = @(
+        "/silent",
+        "/install"
+    )
+
+    Write-Host "Installing OneDrive."
+    try {
+        Start-Process $private:exe -ArgumentList $private:iargs -PassThru -Verbose
+    }
+    catch {
+        Write-Host $_ -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "OneDrive has been installed." -ForegroundColor Green
+}
+function UninstallOneDrive {
+    [string]$private:exe = DownloadOneDrive
+
+    Write-Host "Uninstalling OneDrive."
+    try {
+        Start-Process $private:exe -Argument "/uninstall" -PassThru -Verbose
+    }
+    catch {
+        Write-Host $_ -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "OneDrive has been uninstalled." -ForegroundColor Green
+}
+
 # Adobe functions
 function InstallAdobeDC {
     Write-Host "Installing Adobe DC." -ForegroundColor Cyan
@@ -229,7 +299,8 @@ function InstallAdobeDC {
         Start-Process "msiexec.exe" -Argument "/i `"$msi`"  /qn" -Verbose -Wait
     }
     catch {
-        Write-Host $_
+        Write-Host $_ -ForegroundColor Red
+        exit 1
     }
     Write-Host "Completed installing Adobe DC." -ForegroundColor Green
 }
@@ -240,7 +311,8 @@ function UninstallAdobeDC {
         Start-process "msiexec.exe" -Argument "/x `"$msi`" /qn" -Verbose -Wait
     }
     catch {
-        Write-Host $_
+        Write-Host $_ -ForegroundColor Red
+        exit 1
     }
     Write-Host "Adobe DC has been uninstalled." -ForegroundColor Green
 }
@@ -265,7 +337,7 @@ function TroubleshootWindows {
     Write-Host "Optimizing the OS volume."
     Optimize-Volume -DriveLetter C -Analyze -Confirm -Defrag -ReTrim -SlabConsolidate -Verbose
     Write-Host "Cleaning up the OS image."
-    DISM /Online /Cleanup-Image /RestoreHealth
+    DISM /Online /Cleanup-Image /RestoreHealth /startcomponentcleanup
     Write-Host "Running System File Checker."
     sfc /scannow
     Write-Host "Finished basic Windows fixes." -ForegroundColor Green
@@ -311,8 +383,17 @@ function Install {
         "onenote" {
             InstallOneNote
         }
+        "excel" {
+            InstallExcel
+        }
+        "outlook" {
+            InstallOutlook
+        }
         "adobedc" {
             InstallAdobeDC
+        }
+        "onedrive" {
+            InstallOneDrive
         }
         default {
             Write-Host "I do not have the ability to install that application." -ForegroundColor Red
@@ -337,8 +418,17 @@ function Uninstall {
         "onenote" {
             UninstallOneNote
         }
+        "excel" {
+            UninstallExcel
+        }
+        "outlook" {
+            UninstallOutlook
+        }
         "adobedc" {
             UninstallAdobeDC
+        }
+        "onedrive" {
+            UninstallOneDrive
         }
         Default {
             Write-Host "I do not have a way to uninstall that application." -ForegroundColor Red
@@ -362,6 +452,12 @@ function Reinstall {
         }
         "visio" {
             ReinstallVisio
+        }
+        "excel" {
+            ReinstallExcel
+        }
+        "outlook" {
+            ReinstallOutlook
         }
         "adobedc" {
             ReinstallAdobeDC

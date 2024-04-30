@@ -18,4 +18,22 @@
 - project
 - visio
 - onenote
+- onedrive
 - adobedc
+
+## Roadmap
+### 0.5
+- full odt capabilities written out
+- add any additional Microsoft enterprise apps
+    - OneDrive
+- better error reporting
+
+### 0.7
+- any additional 3rd party enterprise apps like Zoom
+- generic system report
+- logs
+
+### 0.9
+- polish on grammar/spelling
+- uniformity
+- comments in code
