@@ -38,13 +38,13 @@ $ProgressPreference = $false
 [string]$script:log_file = Join-Path -Path $script:log_path -ChildPath $script:log_name
 
 #Create Log File
-[void]$(New-Item -Path $log_file -ItemType "file" -Force)
+[void]$(New-Item -Path $log_file -ItemType "file" -Force -Value "[$(Get-Date -Format "HH:mm:ss")]: Log file created.")
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function Log {
   param(
-      [Parameter(Mandatory=$true)][String]$private:msg
+    [Parameter(Mandatory=$true)][String]$private:msg
   )
 
   [string]$private:time = Get-Date -Format "HH:mm:ss"
