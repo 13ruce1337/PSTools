@@ -37,6 +37,9 @@ $ProgressPreference = $false
 [string]$script:log_name = "<script_name>.log"
 [string]$script:log_file = Join-Path -Path $script:log_path -ChildPath $script:log_name
 
+#Create Log File
+[void]$(New-Item -Path $log_file -ItemType "file" -Force)
+
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 function Log {
