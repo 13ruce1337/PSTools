@@ -35,7 +35,7 @@ $ProgressPreference = $false
 #Log File Info
 [string]$script:log_path = "C:\Windows\Temp"
 [string]$script:log_name = "<script_name>.log"
-[string]$script:log_file = Join-Path -Path $sLogPath -ChildPath $sLogName
+[string]$script:log_file = Join-Path -Path $script:log_path -ChildPath $script:log_name
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
