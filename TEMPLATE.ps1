@@ -51,7 +51,7 @@ function Log {
   [string]$private:text = "[$private:time]:$private:msg"
   
   Write-Host $private:text
-  Add-Content -Path $script:log_file -Value "$private:text"
+  Add-Content -Path $script:log_file -Encoding "unicode" -Value "$private:text"
 }
 
 #-----------------------------------------------------------[Execution]------------------------------------------------------------
