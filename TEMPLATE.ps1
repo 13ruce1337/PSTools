@@ -22,36 +22,33 @@
 
 #---------------------------------------------------------[Initialisations]--------------------------------------------------------
 
+[cmdletbinding()]
+param()
+
 #$ErrorActionPreference = "SilentlyContinue"
+#$DebugPreference = 'SilentlyContinue'
 $ProgressPreference = $false
 
 #Dot Source required Function Libraries
+
+#Script Variables
 
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
 #Script Version
 [float]$script:script_version = 1.0
 
-#Log File Info
+#Logging
 [string]$script:log_path = "C:\Windows\Temp"
 [string]$script:log_name = "<script_name>.log"
 [string]$script:log_file = Join-Path -Path $script:log_path -ChildPath $script:log_name
-
-#Create Log File
-[void]$(New-Item -Path $log_file -ItemType "file" -Force -Value "[$(Get-Date -Format "HH:mm:ss")]: Log file created.")
+Start-Transcript -Force -IncludeInvocationHeader -Path $script:log_file
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
-function Log {
-  param(
-    [Parameter(Mandatory=$true)][String]$private:msg
-  )
 
-  [string]$private:time = Get-Date -Format "HH:mm:ss"
-  [string]$private:text = "[$private:time]:$private:msg"
-  
-  Write-Host $private:text
-  Add-Content -Path $script:log_file -Encoding "unicode" -Value "$private:text"
-}
 
 #-----------------------------------------------------------[Execution]------------------------------------------------------------
+
+Stop-Transcript
+Exit 0
