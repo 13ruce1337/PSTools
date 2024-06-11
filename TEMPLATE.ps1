@@ -29,8 +29,8 @@ param()
 
 #Preferences
 #$ErrorActionPreference = "SilentlyContinue"
-#$DebugPreference = 'SilentlyContinue'
-$ProgressPreference = $false
+#$DebugPreference = "SilentlyContinue"
+$ProgressPreference = "SilentlyContinue"
 
 #Dot Source required Function Libraries
 
