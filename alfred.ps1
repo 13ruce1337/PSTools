@@ -3,7 +3,7 @@
 Alfred Pennyworth
 
 .DESCRIPTION
-VERSION 0.9
+VERSION 1.0
 
 .INPUTS
 COMMANDS
@@ -34,10 +34,29 @@ Repo - https://github.com/13ruce1337/pstools
 Product Codes - https://learn.microsoft.com/en-us/microsoft-365/troubleshoot/installation/product-ids-supported-office-deployment-click-to-run
 #>
 
+#---------------------------------------------------------[Initialisations]--------------------------------------------------------
+
 # This param must be at the top of the script. It defines the inputs.
+[cmdletbinding()]
 param($command, $application)
 
+#Preferences
+#$ErrorActionPreference = "SilentlyContinue"
+#$DebugPreference = "SilentlyContinue"
 $ProgressPreference = 'SilentlyContinue'
+
+#----------------------------------------------------------[Declarations]----------------------------------------------------------
+
+#Script Version
+[float]$script:script_version = 1.0
+
+#Logging
+[string]$script:log_path = "C:\Windows\Temp"
+[string]$script:log_name = "alfred.log"
+[string]$script:log_file = Join-Path -Path $script:log_path -ChildPath $script:log_name
+Start-Transcript -Force -IncludeInvocationHeader -Path $script:log_file
+
+#-----------------------------------------------------------[Functions]------------------------------------------------------------
 
 # Helper functions
 function AdminCheck {
@@ -499,6 +518,9 @@ function Update {
 function SelfDestruct {
     Remove-Item $PSCommandPath -Force 
 }
+
+#-----------------------------------------------------------[Execution]------------------------------------------------------------
+
 # Initial argument (verb) switch
 switch ($command)
 {
@@ -510,3 +532,6 @@ switch ($command)
     "update" {Update}
     "sd" {SelfDestruct}
 }
+
+Stop-Transcript
+Exit 0
