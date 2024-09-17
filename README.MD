@@ -40,3 +40,7 @@ start-process powershell.exe -Argumentlist "-ExecutionPolicy Bypass", "-File $en
 - polish on grammar/spelling
 - uniformity
 - comments in code
+
+### 1.0
+- added logging
+- added more formatting
