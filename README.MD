@@ -23,3 +23,4 @@ start-process powershell.exe -Argumentlist "-ExecutionPolicy Bypass", "-File $en
 - onenote
 - onedrive
 - adobedc
+- network

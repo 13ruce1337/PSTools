@@ -3,7 +3,7 @@
 Alfred Pennyworth
 
 .DESCRIPTION
-VERSION 1.0
+VERSION 1.01
 
 .INPUTS
 COMMANDS
@@ -22,6 +22,7 @@ APPLICATIONS
     onenote
     adobedc
     onedrive
+    network
 
 .OUTPUTS
 This command currently doesn't output any data but will display status.
@@ -387,6 +388,15 @@ function UpdateWindows {
     }
 }
 
+# Nuke functions
+function NukeSelf {
+	if (Get-InstalledModule -Name "PSWindowsUpdate" -ErrorAction "Ignore") {
+    	Write-Host "PSWindowsUpdate is installed, removing..." -ForegroundColor Red
+	    Uninstall-Module -Name "PSWindowsUpdate" -Force
+    }
+    Remove-Item $PSCommandPath -Force 
+}
+
 # Functions for initial input arguments
 function Install {
     switch ($application)
@@ -492,6 +502,9 @@ function Nuke {
     {
         "office" {
             NukeOffice
+        }
+        "self" {
+            NukeSelf
         }
     }
 }
