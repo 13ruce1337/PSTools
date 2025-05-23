@@ -52,6 +52,15 @@ $script:multiple_users = $false
 $script:user_list
 $sharepoint_site = "https://YOURSITE.sharepoint.com/"
 
+#-------------------------------------------------------[Configuration Check]------------------------------------------------------
+
+# Check if $sharepoint_site has been updated
+if ($sharepoint_site -like "*YOURSITE.sharepoint.com*") {
+    Write-Error "Error: Please update the `$sharepoint_site` variable in the script with your actual SharePoint site URL."
+    Write-Host "Example: `$sharepoint_site = 'https://yourcompany.sharepoint.com/'`" -ForegroundColor Yellow
+    Exit 1
+}
+
 #----------------------------------------------------------[Declarations]----------------------------------------------------------
 
 #Script Version
