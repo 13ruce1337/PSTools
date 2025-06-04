@@ -13,11 +13,11 @@
     Purpose/Change: Initial script development
     Mod 5/7/25: Updated QOL, comments, function for connecting, module check/install
     Mod 5/14/25: Added function for main components, added abillity to take a CSV
-  
+
 .EXAMPLE
     .\deprovision-user.ps1 -user trevor.cooper -manager tuan.pham -date "10/10/24"
     .\deprovision-user.ps1
-  
+
 .LINK
 #>
 
@@ -34,7 +34,7 @@ param(
 $ProgressPreference = "SilentlyContinue"
 
 #Assemblies
-[System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") 
+[System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms")
 
 #Script Variables
 $dependency_modules = @(
@@ -45,9 +45,9 @@ $dependency_modules = @(
     "ExchangeOnlineManagement",
     "AzureAD"
 )
-$script:id 
-$script:managerid 
-$script:ooom 
+$script:id
+$script:managerid
+$script:ooom
 $script:multiple_users = $false
 $script:user_list
 $sharepoint_site = "https://YOURSITE.sharepoint.com/"
@@ -64,6 +64,23 @@ $sharepoint_site = "https://YOURSITE.sharepoint.com/"
 Start-Transcript -Force -IncludeInvocationHeader -Path $script:log_file
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
+
+function Test-SharePointSiteVariable {
+    <#
+    .SYNOPSIS
+        Checks if the SharePoint site variable has been updated.
+
+    .DESCRIPTION
+        This function verifies if the $sharepoint_site variable still contains the placeholder value.
+        If it does, it outputs an error message and exits the script.
+    #>
+    if ($script:sharepoint_site -like "*YOURSITE.sharepoint.com*") {
+        Write-Error "Error: Please update the `$sharepoint_site` variable in the script with your actual SharePoint site URL."
+        Write-Host "Example: `$sharepoint_site = 'https://yourcompany.sharepoint.com/'`" -ForegroundColor Yellow
+        Exit 1
+    }
+}
+
 function connect_services {
     Write-Host "Due to MFA, we cannot store credentials. So you will be profusely asked for them while connecting to the different platforms." -ForegroundColor Yellow
     Connect-Graph -Scopes User.ReadWrite.All, Organization.Read.All
@@ -85,7 +102,7 @@ function mod_check($mod) {
     if (!(Get-Module -ListAvailable -Name $mod)) {
         Write-Host "$mod is missing, instaling now..."
         Install-Module $mod
-    } 
+    }
     else {
         Write-Host "$mod is installed."
     }
@@ -129,8 +146,8 @@ function remove_groups {
     }
 }
 function remove_licenses {
-    $licenses = Get-MgUserLicenseDetail -UserId $script:id.EmailAddress 
-    $licenses_filtered = @() 
+    $licenses = Get-MgUserLicenseDetail -UserId $script:id.EmailAddress
+    $licenses_filtered = @()
     foreach($license in $licenses) {
         $licenses_filtered += $license.SkuId
     }
@@ -196,6 +213,9 @@ catch {
     exit 1
 }
 
+# Check if $sharepoint_site has been updated
+Test-SharePointSiteVariable
+
 connect_services
 arg_check
 
@@ -212,14 +232,14 @@ if ($multiple_users) {
     foreach ($emp in $script:user_list) {
         Write-Host "Deprovisioning" $emp.user
         initialize_vars -user $emp.user -manager $emp.manager -date $emp.date
-        deprovision_ad 
+        deprovision_ad
         deprovision_msol
     }
 } else {
     Write-Host "Running for a single user"
     initialize_vars -user $user -manager $manager -date $date
     deprovision_ad
-    deprovision_msol 
+    deprovision_msol
 }
 
 Write-Host "Disconnecting from services"
