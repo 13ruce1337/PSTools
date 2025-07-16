@@ -65,7 +65,7 @@ Start-Transcript -Force -IncludeInvocationHeader -Path $script:log_file
 
 #-----------------------------------------------------------[Functions]------------------------------------------------------------
 
-function Test-SharePointSiteVariable {
+function test_sharepoint_site_variable {
     <#
     .SYNOPSIS
         Checks if the SharePoint site variable has been updated.
@@ -76,7 +76,7 @@ function Test-SharePointSiteVariable {
     #>
     if ($script:sharepoint_site -like "*YOURSITE.sharepoint.com*") {
         Write-Error "Error: Please update the `$sharepoint_site` variable in the script with your actual SharePoint site URL."
-        Write-Host "Example: `$sharepoint_site = 'https://yourcompany.sharepoint.com/'`" -ForegroundColor Yellow
+        Write-Host "Example: `$sharepoint_site = 'https://yourcompany.sharepoint.com/'" -ForegroundColor Yellow
         Exit 1
     }
 }
@@ -214,7 +214,7 @@ catch {
 }
 
 # Check if $sharepoint_site has been updated
-Test-SharePointSiteVariable
+test_sharepoint_site_variable
 
 connect_services
 arg_check
