@@ -11,10 +11,11 @@
     Outputs a CSV file in the same directory as this file.
 
 .NOTES
-    Version:        1.0
+    Version:        2.0
     Author:         Trevor Cooper
     Creation Date:  8/7/2025
     Purpose/Change: Initial script development
+    Change: There was a V1 but it was embedded into this one which uses jobs for faster processing/calls to api.
 
     Addendum: I'm aware /networks/$($network.id)/devices is deprecated and am working to replace.
   
@@ -84,19 +85,19 @@ function main {
                         mac         = $device.mac
                     }
                 }
-                Write-Host "Writing current firmware info"
                 $product_types = @("appliance", "cellularGateway", "sensor", "switch", "switchCatalyst", "wireless")
                 $results = @()
                 foreach ($type in $product_types) {
                     if ($firmware_info.products.$type) {
+                        Write-Host "Getting lastest firmware version for $type"
                         $latest = $firmware_info.products.$type.availableVersions[-1].shortName
                         $results += [PSCustomObject]@{
                             name     = "Latest $type"
-                            model    = $type.Substring(0,2).ToUpper()
                             firmware = $latest
                         }
                     }
                 }
+                $device_list += $results
                 $device_list += [PSCustomObject]@{}
             } 
         } catch {
