@@ -11,11 +11,10 @@
     Outputs a CSV file in the same directory as this file.
 
 .NOTES
-    Version:        2.0
+    Version:        1.0
     Author:         Trevor Cooper
     Creation Date:  8/7/2025
     Purpose/Change: Initial script development
-    Change: There was a V1 but it was embedded into this one which uses jobs for faster processing/calls to api.
 
     Addendum: I'm aware /networks/$($network.id)/devices is deprecated and am working to replace.
   
