@@ -1,32 +1,114 @@
-# Alfred Pennyworth
-**Must be ran as administrator**
-```
-Invoke-WebRequest https://raw.githubusercontent.com/13ruce1337/PSTools/main/alfred.ps1 -OutFile "$env:TEMP\alfred.ps1"
-```
-```
-start-process powershell.exe -Argumentlist "-ExecutionPolicy Bypass", "-File $env:TEMP\alfred.ps1", "update windows" -NoNewWindow
-```
+# Alfred Pennyworth — IT Automation Script
+> **Version 1.01** | PowerShell Automation Toolkit
 
-## COMMANDS
-- install
-- uninstall
-- reinstall
-- nuke
-- update
-- troubleshoot
-- sd
-## APPLICATIONS
-- office
-- teams
-- project
-- visio
-- onenote
-- onedrive
-- adobedc
-- network
+Alfred is a PowerShell script that handles common IT tasks — installing, uninstalling, reinstalling, and troubleshooting applications and Windows — all from a single command.
 
 ---
 
+## Requirements
+
+| Requirement | Details |
+|---|---|
+| **Permissions** | Must be run as **Administrator** |
+| **Shell** | PowerShell (Execution Policy Bypass required) |
+| **OS** | Windows 10 / 11 |
+
+> ⚠️ **Teams** and **OneDrive** must be run as a **standard user** (not Administrator). Alfred will warn you if you attempt otherwise.
+
+---
+
+## Quick Start (Run from Web)
+
+Download and execute Alfred directly from GitHub in one step:
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/13ruce1337/PSTools/main/alfred.ps1 -OutFile "$env:TEMP\alfred.ps1"
+Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass", "-File $env:TEMP\alfred.ps1", "<command>", "<application>" -NoNewWindow
+```
+
+Replace `<command>` and `<application>` with values from the tables below.
+
+---
+
+## Usage
+
+```
+alfred.ps1 <command> <application>
+```
+
+### Examples
+
+```powershell
+# Install Microsoft Office
+.\alfred.ps1 install office
+
+# Reinstall Teams
+.\alfred.ps1 reinstall teams
+
+# Uninstall Adobe Acrobat DC
+.\alfred.ps1 uninstall adobedc
+
+# Run network troubleshooting
+.\alfred.ps1 troubleshoot network
+
+# Update Windows
+.\alfred.ps1 update windows
+
+# Nuke (remove ALL) Office applications
+.\alfred.ps1 nuke office
+
+# Self-destruct (delete the script)
+.\alfred.ps1 sd
+```
+
+---
+
+## Supported Applications
+
+| Application | `install` | `uninstall` | `reinstall` | Notes |
+|---|:---:|:---:|:---:|---|
+| `office` | ✅ | ✅ | ✅ | Microsoft 365 ProPlus (64-bit, Current Channel) |
+| `teams` | ✅ | ✅ | ✅ | ⚠️ Must run as **standard user** |
+| `visio` | ✅ | ✅ | ✅ | Visio Pro 2021 |
+| `project` | ✅ | ✅ | ✅ | Project Pro 2021 |
+| `onenote` | ✅ | ✅ | ✅ | OneNote Retail |
+| `onedrive` | ✅ | ✅ | ❌ | ⚠️ Must run as **standard user** |
+| `adobedc` | ✅ | ✅ | ✅ | Adobe Acrobat DC (Standard, 64-bit) |
+| `network` | ❌ | ❌ | ❌ | Used with `troubleshoot` only |
+
+---
+
+## Troubleshoot Targets
+
+| Target | Command | What It Does |
+|---|---|---|
+| `network` | `troubleshoot network` | Releases/renews IP, flushes & registers DNS, displays full `ipconfig /all` |
+| `windows` | `troubleshoot windows` | Runs Windows Update, Disk Optimization, DISM image repair, and SFC scan |
+
+---
+
+## Nuke Targets
+
+> ⚠️ These actions are destructive and irreversible.
+
+| Target | Command | What It Does |
+|---|---|---|
+| `office` | `nuke office` | Removes **all** Microsoft Office products using ODT `Remove All="TRUE"` |
+| `self` | `nuke self` | Removes PSWindowsUpdate module and deletes the script |
+
+---
+
+## Logging
+
+Alfred automatically logs all activity to:
+
+```
+C:\Windows\Temp\alfred.log
+```
+
+A transcript is started at launch and stopped on exit. Check this file for detailed output and error messages.
+  
+  
 # Windows Unattended Reference Image & FFU Preparation Guide
 
 This guide details how to build an automated, bootable Windows 10/11 installation ISO using an answer file (`autounattend.xml`) and Microsoft's `oscdimg` deployment utility. The resulting VM boots straight to the desktop for rapid configuration prior to Sysprep and Full Flash Update (FFU) capture.
