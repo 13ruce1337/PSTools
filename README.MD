@@ -17,7 +17,7 @@ Alfred is a PowerShell script that handles common IT tasks — installing, unins
 
 ---
 
-## Quick Start (Run from Web)
+## Quick Start
 
 Download and execute Alfred directly from GitHub in one step:
 
