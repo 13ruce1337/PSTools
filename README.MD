@@ -137,7 +137,7 @@ Run the following command in **PowerShell (Run as Administrator)**:
   -o `
   -u2 `
   -udfs `
-  -bootdata:2#p0,e,b"<SOURCE_DIR>\boot\etfsboot.com"#pEF,e,b"<SOURCE_DIR>\efi\microsoft\boot\efisys.bin" `
+  -bootdata:2#p0,e,b"<SOURCE_DIR>\boot\etfsboot.com"#pEF,e,b"<SOURCE_DIR>\efi\microsoft\boot\efisys_noprompt.bin" `
   "<SOURCE_DIR>" `
   "<OUTPUT_DIR>\<ISO_NAME>.iso"
 ```
