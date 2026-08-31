@@ -108,9 +108,7 @@ C:\Windows\Temp\alfred.log
 
 A transcript is started at launch and stopped on exit. Check this file for detailed output and error messages.
   
-```
 ---  
-```
 
 # Windows Unattended Reference Image & FFU Preparation Guide
 
