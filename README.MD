@@ -108,7 +108,10 @@ C:\Windows\Temp\alfred.log
 
 A transcript is started at launch and stopped on exit. Check this file for detailed output and error messages.
   
-  
+```
+---  
+```
+
 # Windows Unattended Reference Image & FFU Preparation Guide
 
 This guide details how to build an automated, bootable Windows 10/11 installation ISO using an answer file (`autounattend.xml`) and Microsoft's `oscdimg` deployment utility. The resulting VM boots straight to the desktop for rapid configuration prior to Sysprep and Full Flash Update (FFU) capture.
