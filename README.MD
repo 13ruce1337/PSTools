@@ -133,7 +133,7 @@ Use Microsoft's `oscdimg` utility (included with the Windows ADK Deployment Tool
 Run the following command in **PowerShell (Run as Administrator)**:
 
 ```powershell
-& "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe" -m -o -u2 -udfver102 "-bootdata:2#p0,e,b<SOURCE_DIR>\boot\etfsboot.com#pEF,e,b<SOURCE_DIR>\efi\microsoft\boot\efisys_noprompt.bin" "SOURCE_DIR" "ISO_NAME"
+& "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe" -m -o -u2 -udfver102 "-bootdata:2#p0,e,b<SOURCE_DIR>\boot\etfsboot.com#pEF,e,b<SOURCE_DIR>\efi\microsoft\boot\efisys_noprompt.bin" "<SOURCE_DIR>" "<OUTPUT_DIR>\<ISO_NAME>"
 ```
 
 ### Parameter Placeholders
