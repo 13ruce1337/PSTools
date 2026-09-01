@@ -1,529 +1,445 @@
+﻿#requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Lenovo Driver Stager -- FFU/Deployment Edition v4.0
+    Stages Lenovo driver packs (SCCM + discrete GFX) into the local driver
+    store of a Hyper-V staging VM, prior to sysprep / FFU capture.
 
 .DESCRIPTION
-    Downloads and installs ALL Lenovo drivers for a manually specified
-    machine type. Handles Lenovo's two-level catalog format:
-      Level 1: <MachineType>_Win11.xml  -- list of package descriptor URLs
-      Level 2: each descriptor XML      -- contains the actual installer filename
+    Reads Lenovo's live catalog (catalogv2.xml), resolves the correct pack for a
+    machine type (MTM), downloads with hash verification and caching, silently
+    extracts, stages every INF with pnputil, then writes a JSON manifest into
+    C:\Windows\Logs\ImageDrivers so the resulting FFU is self-documenting.
 
-.PARAMETER MachineType
-    4-character Lenovo Machine Type. E.g. "20XW", "21AH", "20Y7"
-    Found on the device label, in BIOS, or at https://support.lenovo.com
-
-.PARAMETER OSVersion
-    Win10 or Win11 (Default: Win11)
-
-.PARAMETER DownloadPath
-    Folder to save driver packages. Default: C:\LenovoDrivers
-
-.PARAMETER InstallDrivers
-    If set, installs all downloaded packages silently after downloading.
+    v2 changes:
+      - BOM-safe catalog parsing via XmlDocument.Load() (fixes the "Data at the
+        root level is invalid" dump)
+      - Handles <GFX> discrete graphics packs (NVIDIA/AMD on P-series)
+      - Ignores <HSA> Hardware Support Apps (Store apps, not INF drivers)
+      - Dedupes packs that share a single URL across multiple OS versions
+      - All errors truncated so a parse failure never dumps 1.4 MB to console
 
 .EXAMPLE
-    .\LenovoDriverStager.ps1 -MachineType "20XW" -InstallDrivers
-    .\LenovoDriverStager.ps1 -MachineType "20XW"
-    .\LenovoDriverStager.ps1 -InstallDrivers
+    .\Add-LenovoDriversToImage.ps1 -MachineType 21HD -OSVersion 25H2
 
-.NOTES
-    Requires: PowerShell 5.1+, Internet access
-    Run as Administrator when using -InstallDrivers
+.EXAMPLE
+    .\Add-LenovoDriversToImage.ps1 -ModelName 'X1 Carbon Gen 12' -Prune
+
+.EXAMPLE
+    '21HD','21K3','21F6' | ForEach-Object {
+        .\Add-LenovoDriversToImage.ps1 -MachineType $_ -OSVersion 25H2
+    }
 #>
-
-#Requires -Version 5.1
-
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'ByType')]
 param(
-    [string]$MachineType  = "",
-    [ValidateSet("Win10","Win11")]
-    [string]$OSVersion    = "Win11",
-    [string]$DownloadPath = "C:\LenovoDrivers",
-    [switch]$InstallDrivers
+    # 4-character Lenovo machine type, e.g. 21HD. This is the reliable key.
+    [Parameter(Mandatory, ParameterSetName = 'ByType', Position = 0)]
+    [ValidatePattern('^[A-Za-z0-9]{4}$')]
+    [string]$MachineType,
+
+    # Substring of the catalog model name. Use only if you don't know the MTM.
+    [Parameter(Mandatory, ParameterSetName = 'ByName', Position = 0)]
+    [string]$ModelName,
+
+    [ValidateSet('21H2','22H2','23H2','24H2','25H2')]
+    [string]$OSVersion,
+
+    # Include discrete graphics packs (<GFX>). Required for P1/P16/ThinkStation.
+    [switch]$IncludeGraphics,
+
+    # Drop categories that don't belong in a base image.
+    [switch]$Prune,
+
+    [string]$WorkRoot  = 'C:\_DriverStage',
+    [string]$CacheRoot = 'C:\_DriverCache',
+
+    # Keep extracted INF trees on disk (debugging).
+    [switch]$KeepFiles,
+
+    # Resolve and report only. No download, no staging.
+    [switch]$WhatIfOnly
 )
 
-# ---------------------------------------------------------------
-# GLOBALS
-# ---------------------------------------------------------------
-$Script:LogFile   = $null
-$Script:Installed = 0
-$Script:Skipped   = 0
-$Script:Failed    = 0
-$Script:Errors    = [System.Collections.Generic.List[string]]::new()
+Set-StrictMode -Version 2.0
+$ErrorActionPreference   = 'Stop'
+$ProgressPreference      = 'SilentlyContinue'   # ~10x faster web transfers
+$FormatEnumerationLimit  = 4                    # never carpet-bomb the console
 
-# ---------------------------------------------------------------
-# HELPERS
-# ---------------------------------------------------------------
-function ConvertTo-SafeString {
-    param($Value)
-    return ([string]$Value).Trim()
-}
+$CatalogUrl = 'https://download.lenovo.com/cdrt/td/catalogv2.xml'
+$LogDir     = 'C:\Windows\Logs\ImageDrivers'
+$FallbackOrder = @('25H2','24H2','23H2','22H2','21H2')
 
-function New-WebClient {
-    $wc = New-Object System.Net.WebClient
-    $wc.Headers.Add("User-Agent", "LenovoDriverStager/1.0")
-    return $wc
-}
+$null = New-Item $LogDir -ItemType Directory -Force
 
-# ---------------------------------------------------------------
-# LOGGING
-# ---------------------------------------------------------------
+#region Helpers ---------------------------------------------------------------
+
 function Write-Log {
     param(
-        [string]$Message,
-        [ValidateSet("INFO","SUCCESS","WARN","ERROR","SECTION")]
-        [string]$Level = "INFO"
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','OK','STEP')][string]$Level = 'INFO'
     )
-    $ts    = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $entry = "[$ts] [$Level] $Message"
-    $color = switch ($Level) {
-        "INFO"    { "Cyan"    }
-        "SUCCESS" { "Green"   }
-        "WARN"    { "Yellow"  }
-        "ERROR"   { "Red"     }
-        "SECTION" { "Magenta" }
-        default   { "White"   }
-    }
-    Write-Host $entry -ForegroundColor $color
-    if ($Script:LogFile) {
-        Add-Content -Path $Script:LogFile -Value $entry -ErrorAction SilentlyContinue
-    }
+    $color = @{ INFO='Gray'; WARN='Yellow'; ERROR='Red'; OK='Green'; STEP='Cyan' }[$Level]
+    Write-Host ('[{0}] [{1,-5}] {2}' -f (Get-Date -Format 'HH:mm:ss'), $Level, $Message) -ForegroundColor $color
+    Add-Content -LiteralPath (Join-Path $LogDir 'staging.log') -Value ('{0} [{1}] {2}' -f (Get-Date -Format s), $Level, $Message)
 }
 
-function Write-Section {
-    param([string]$Title)
-    Write-Host ""
-    Write-Host ("-" * 60) -ForegroundColor DarkCyan
-    Write-Log "  $Title" "SECTION"
-    Write-Host ("-" * 60) -ForegroundColor DarkCyan
+function Get-ShortError {
+    # Keeps a failed [xml] cast or similar from printing the whole document.
+    param([Parameter(Mandatory)]$ErrorRecord, [int]$Max = 400)
+    $m = $ErrorRecord.Exception.Message -replace '\s+', ' '
+    if ($m.Length -gt $Max) { $m.Substring(0, $Max) + ' ...[truncated]' } else { $m }
 }
 
-# ---------------------------------------------------------------
-# SETUP
-# ---------------------------------------------------------------
-function Initialize-Environment {
-    if (-not (Test-Path $DownloadPath)) {
-        New-Item -ItemType Directory -Path $DownloadPath -Force | Out-Null
-    }
-    $Script:LogFile = "$DownloadPath\DriverInstall_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-    New-Item -ItemType File -Path $Script:LogFile -Force | Out-Null
-    Write-Log "Download path : $DownloadPath"
-    Write-Log "Log file      : $Script:LogFile"
-    Write-Log "OS Target     : $OSVersion"
-}
+function Get-LenovoCatalog {
+    param([Parameter(Mandatory)][string]$Url)
 
-# ---------------------------------------------------------------
-# MACHINE TYPE INPUT
-# ---------------------------------------------------------------
-function Get-MachineType {
-    Write-Section "Machine Type"
-
-    if ($MachineType -ne "") {
-        $mt = $MachineType.Trim().ToUpper()
-        Write-Log "Machine Type: $mt" "SUCCESS"
-        return $mt
-    }
-
-    Write-Host ""
-    Write-Host "  Enter the Lenovo Machine Type (e.g. 20XW, 21AH)." -ForegroundColor White
-    Write-Host "  Find it on the device label, in BIOS, or at https://support.lenovo.com" -ForegroundColor DarkGray
-    Write-Host ""
-
-    do {
-        $inputVal = Read-Host "  Machine Type"
-        $mt       = $inputVal.Trim().ToUpper()
-        if ($mt.Length -lt 4) {
-            Write-Host "  Must be at least 4 characters. Try again." -ForegroundColor Red
-        }
-    } while ($mt.Length -lt 4)
-
-    Write-Log "Machine Type: $mt" "SUCCESS"
-    return $mt
-}
-
-# ---------------------------------------------------------------
-# LEVEL 1 CATALOG FETCH
-# Returns an array of package descriptor URLs (<location> nodes)
-# ---------------------------------------------------------------
-function Get-CatalogLocations {
-    param([string]$MT)
-
-    Write-Section "Fetching Level-1 Catalog"
-
-    $urlsToTry = @(
-        "https://download.lenovo.com/catalog/${MT}_${OSVersion}.xml",
-        "https://download.lenovo.com/catalog/${MT}_${OSVersion}_64.xml",
-        "https://download.lenovo.com/catalog/${MT}.xml"
-    )
-    if ($OSVersion -eq "Win11") {
-        $urlsToTry += "https://download.lenovo.com/catalog/${MT}_Win10.xml"
-        $urlsToTry += "https://download.lenovo.com/catalog/${MT}_Win10_64.xml"
-    }
-
-    $catalogFile = "$DownloadPath\catalog_${MT}.xml"
-    $wc          = New-WebClient
-
-    foreach ($url in $urlsToTry) {
-        Write-Log "Trying: $url"
-        try {
-            $wc.DownloadFile($url, $catalogFile)
-            [xml]$xml = Get-Content -Path $catalogFile -Encoding UTF8 -ErrorAction Stop
-
-            # Collect all <location> values -- this is the two-level catalog format
-            $locations = @()
-            $root = $xml.DocumentElement
-            foreach ($node in $root.ChildNodes) {
-                if ($node.NodeType -ne 'Element') { continue }
-                $loc = ConvertTo-SafeString $node.location
-                if ($loc -ne "") { $locations += $loc }
-            }
-
-            if ($locations.Count -gt 0) {
-                Write-Log "Catalog OK -- $($locations.Count) package descriptors found." "SUCCESS"
-                return $locations
-            }
-            Write-Log "  No <location> nodes found. Trying next URL." "WARN"
-        }
-        catch {
-            Write-Log "  Failed: $url -- $_" "WARN"
-        }
-    }
-
-    Write-Log "Could not find a valid catalog for '$MT'." "ERROR"
-    Write-Log "Check the machine type at: https://support.lenovo.com" "WARN"
-    return @()
-}
-
-# ---------------------------------------------------------------
-# LEVEL 2 PACKAGE DESCRIPTOR FETCH
-# Each location URL points to a package descriptor XML.
-# Returns a PSCustomObject with Name, Version, Category, InstallFile, BaseUrl
-#
-# Descriptor structure:
-#   <Package name="..." id="..." version="...">
-#     <Title><Desc id="EN">Friendly name</Desc></Title>
-#     <Files>
-#       <Installer>
-#         <File>
-#           <Name>n3ipa17w.exe</Name>     <- installer filename
-#         </File>
-#       </Installer>
-#     </Files>
-#   </Package>
-#
-# The installer download URL = base path of the descriptor URL + installer filename
-# e.g. https://download.lenovo.com/pccbbs/mobiles/n3ipa17w.exe
-# ---------------------------------------------------------------
-function Get-PackageDescriptor {
-    param([string]$LocationUrl, [string]$TempPath)
-
+    # Lenovo serves this with a UTF-8 BOM. Invoke-WebRequest decodes the BOM to
+    # the literal chars 'i>>?' which breaks a [xml] string cast. Loading from
+    # bytes lets XmlDocument do its own encoding detection instead.
+    $tmp = Join-Path $env:TEMP ('lenovo_catalogv2_{0}.xml' -f $PID)
     try {
-        $wc = New-WebClient
-        $tmpFile = Join-Path $TempPath ("tmp_" + [System.IO.Path]::GetFileName($LocationUrl))
-        $wc.DownloadFile($LocationUrl, $tmpFile)
+        Invoke-WebRequest -Uri $Url -OutFile $tmp -UseBasicParsing -TimeoutSec 120
 
-        [xml]$desc = Get-Content -Path $tmpFile -Encoding UTF8 -ErrorAction Stop
+        $size = [Math]::Round((Get-Item $tmp).Length / 1KB, 0)
+        if ($size -lt 100) { throw "Catalog download is only $size KB - looks truncated or blocked." }
 
-        # Name
-        $pkgName    = ConvertTo-SafeString $desc.Package.name
-        $pkgId      = ConvertTo-SafeString $desc.Package.id
-        $pkgVersion = ConvertTo-SafeString $desc.Package.version
+        $doc = New-Object System.Xml.XmlDocument
+        $doc.XmlResolver = $null          # no external DTD/entity fetches
+        $doc.Load($tmp)                   # byte-level, BOM-safe
 
-        # Friendly title -- try EN first, then first available Desc
-        $title = ""
-        $titleNodes = $desc.SelectNodes("//Title/Desc")
-        foreach ($tn in $titleNodes) {
-            $t = ConvertTo-SafeString $tn.InnerText
-            if ($t -ne "") {
-                if ((ConvertTo-SafeString $tn.id) -eq "EN") { $title = $t; break }
-                if ($title -eq "") { $title = $t }
-            }
-        }
-        if ($title -eq "") { $title = $pkgName }
-
-        # Category
-        $category = ""
-        $catNode  = $desc.SelectSingleNode("//Category")
-        if ($catNode) { $category = ConvertTo-SafeString $catNode.InnerText }
-        if ($category -eq "") { $category = "Unknown" }
-
-        # Installer file name from <Files><Installer><File><Name>
-        $installerName = ""
-        $instNode = $desc.SelectSingleNode("//Files/Installer/File/Name")
-        if ($instNode) { $installerName = ConvertTo-SafeString $instNode.InnerText }
-
-        if ($installerName -eq "") {
-            Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
-            return $null
-        }
-
-        # Build download URL -- same base path as the descriptor, different filename
-        $baseUrl = $LocationUrl.Substring(0, $LocationUrl.LastIndexOf('/') + 1)
-        $downloadUrl = $baseUrl + $installerName
-
-        Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
-
-        return [PSCustomObject]@{
-            ID           = $pkgId
-            Name         = if ($title -ne "") { $title } else { $pkgName }
-            Version      = $pkgVersion
-            Category     = $category
-            InstallerFile = $installerName
-            DownloadUrl  = $downloadUrl
-        }
+        $models = @($doc.ModelList.Model)
+        if ($models.Count -eq 0) { throw 'Catalog parsed but contained no <Model> nodes.' }
+        return $models
     }
     catch {
-        return $null
+        throw ('Failed to load Lenovo catalog: {0}' -f (Get-ShortError $_))
+    }
+    finally {
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
     }
 }
 
-# ---------------------------------------------------------------
-# MAIN DOWNLOAD LOOP
-# For each location URL:
-#   1. Fetch the package descriptor XML
-#   2. Extract installer filename + build download URL
-#   3. Download the installer
-# ---------------------------------------------------------------
-function Get-DriverPackages {
+function Resolve-LenovoModel {
     param(
-        [string[]]$Locations,
-        [string]$MT
+        [Parameter(Mandatory)][array]$Models,
+        [string]$Type,
+        [string]$Name
     )
-
-    Write-Section "Fetching Package Descriptors and Downloading"
-
-    $mtFolder  = Join-Path $DownloadPath $MT
-    $tmpFolder = Join-Path $DownloadPath "_tmp"
-    foreach ($folder in @($mtFolder, $tmpFolder)) {
-        if (-not (Test-Path $folder)) {
-            New-Item -ItemType Directory -Path $folder -Force | Out-Null
-        }
+    if ($Type) {
+        $t = $Type.ToUpper()
+        $hits = @($Models | Where-Object {
+            $_.Types -and (@($_.Types.Type) -contains $t)
+        })
+        $label = $t
+    }
+    else {
+        $hits = @($Models | Where-Object { $_.name -like "*$Name*" })
+        $label = $Name
     }
 
-    $total           = $Locations.Count
-    $downloadedPaths = [System.Collections.Generic.List[string]]::new()
-    $wc              = New-WebClient
-
-    for ($i = 0; $i -lt $total; $i++) {
-        $locUrl = $Locations[$i]
-        $idx    = $i + 1
-
-        Write-Log "[$idx/$total] Fetching descriptor: $locUrl"
-
-        $pkg = Get-PackageDescriptor -LocationUrl $locUrl -TempPath $tmpFolder
-
-        if (-not $pkg) {
-            Write-Log "  SKIPPED -- could not parse descriptor" "WARN"
-            $Script:Skipped++
-            continue
-        }
-
-        if ($pkg.InstallerFile -eq "" -or $pkg.DownloadUrl -eq "") {
-            Write-Log "  SKIPPED -- no installer found in descriptor: $($pkg.Name)" "WARN"
-            $Script:Skipped++
-            continue
-        }
-
-        Write-Log "  Name     : $($pkg.Name)"
-        Write-Log "  Version  : $($pkg.Version)"
-        Write-Log "  Category : $($pkg.Category)"
-        Write-Log "  URL      : $($pkg.DownloadUrl)"
-
-        # Destination folder per package
-        $safeId   = ($pkg.ID -replace '[^\w\-]', '_')
-        if ($safeId -eq "") { $safeId = "pkg_$idx" }
-        $pkgFolder = Join-Path $mtFolder $safeId
-        $destFile  = Join-Path $pkgFolder $pkg.InstallerFile
-
-        if (-not (Test-Path $pkgFolder)) {
-            New-Item -ItemType Directory -Path $pkgFolder -Force | Out-Null
-        }
-
-        if (Test-Path $destFile) {
-            Write-Log "  Already downloaded -- skipping." "INFO"
-            $downloadedPaths.Add($destFile)
-            continue
-        }
-
-        try {
-            $wc.DownloadFile($pkg.DownloadUrl, $destFile)
-            $sizeMB = [math]::Round((Get-Item $destFile).Length / 1MB, 2)
-            Write-Log "  Saved: $($pkg.InstallerFile) ($sizeMB MB)" "SUCCESS"
-            $downloadedPaths.Add($destFile)
-
-            # Save metadata
-            $pkg | ConvertTo-Json | Set-Content "$pkgFolder\info.json" -Encoding UTF8
-        }
-        catch {
-            Write-Log "  FAILED: $($pkg.Name) -- $_" "ERROR"
-            $Script:Errors.Add("Download failed: $($pkg.Name)")
-            $Script:Failed++
-        }
+    if ($hits.Count -eq 0) {
+        throw "No catalog entry matched '$label'. Check the MTM on the underside label or run: (Get-CimInstance Win32_ComputerSystem).Model"
     }
-
-    # Cleanup temp
-    Remove-Item $tmpFolder -Recurse -Force -ErrorAction SilentlyContinue
-
-    Write-Log ""
-    Write-Log "Download complete. $($downloadedPaths.Count) of $total packages ready." "SUCCESS"
-    return $downloadedPaths
+    if ($hits.Count -gt 1) {
+        Write-Log "Ambiguous match for '$label' - $($hits.Count) candidates:" 'WARN'
+        foreach ($h in $hits) {
+            Write-Log ('    {0}   [{1}]  arch={2}' -f $h.name, (@($h.Types.Type) -join ','), $h.arch) 'WARN'
+        }
+        throw "Ambiguous. Re-run with a specific -MachineType (Intel and AMD variants of the same model name are separate packs)."
+    }
+    return $hits[0]
 }
 
-# ---------------------------------------------------------------
-# INSTALL PACKAGES
-# ---------------------------------------------------------------
-function Install-DriverPackages {
-    param([System.Collections.Generic.List[string]]$FilePaths)
+function Select-DriverPack {
+    <#  Picks one pack node for the requested OS version, walking backwards
+        through the fallback order if the exact version isn't published.
+        Lenovo often points several <SCCM> version rows at one file, so callers
+        must dedupe on URL. #>
+    param(
+        [Parameter(Mandatory)]$ModelNode,
+        [Parameter(Mandatory)][string]$ElementName,   # 'SCCM' or 'GFX'
+        [Parameter(Mandatory)][string]$Wanted
+    )
+    $all = @($ModelNode.SelectNodes($ElementName) | Where-Object { $_.os -eq 'win11' })
+    if ($all.Count -eq 0) { return $null }
 
-    Write-Section "Installing Packages"
+    $exact = @($all | Where-Object { $_.version -eq $Wanted })
+    if ($exact.Count -gt 0) { return $exact[0] }
 
-    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
-        ).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
-        Write-Log "Not running as Administrator -- cannot install." "ERROR"
-        Write-Log "Re-run PowerShell as Administrator with -InstallDrivers." "WARN"
-        return
+    $start = [Array]::IndexOf($FallbackOrder, $Wanted)
+    if ($start -lt 0) { $start = 0 }
+    for ($i = $start; $i -lt $FallbackOrder.Count; $i++) {
+        $c = @($all | Where-Object { $_.version -eq $FallbackOrder[$i] })
+        if ($c.Count -gt 0) {
+            Write-Log "No win11 $Wanted $ElementName pack; falling back to $($FallbackOrder[$i])." 'WARN'
+            return $c[0]
+        }
+    }
+    return $all[0]
+}
+
+function Get-VerifiedPack {
+    <#  Download with cache reuse + SHA256 verification. The catalog's 'crc'
+        attribute is actually a SHA256 despite the name. #>
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [string]$Sha256,
+        [Parameter(Mandatory)][string]$Destination
+    )
+    $null = New-Item (Split-Path $Destination) -ItemType Directory -Force
+
+    if (Test-Path $Destination) {
+        if ($Sha256) {
+            if ((Get-FileHash $Destination -Algorithm SHA256).Hash -eq $Sha256.ToUpper()) {
+                Write-Log 'Cached copy verified - skipping download.' 'OK'
+                return $Destination
+            }
+            Write-Log 'Cached copy failed hash check - re-downloading.' 'WARN'
+        }
+        Remove-Item $Destination -Force
     }
 
-    $total = $FilePaths.Count
-    $index = 0
+    Write-Log 'Downloading (packs are typically 1-3 GB)...'
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    try {
+        Start-BitsTransfer -Source $Url -Destination $Destination -Description 'Lenovo driver pack' -ErrorAction Stop
+    }
+    catch {
+        Write-Log "BITS unavailable ($(Get-ShortError $_ 120)) - using Invoke-WebRequest." 'WARN'
+        Invoke-WebRequest -Uri $Url -OutFile $Destination -UseBasicParsing -TimeoutSec 3600
+    }
+    $sw.Stop()
 
-    foreach ($filePath in $FilePaths) {
-        $index++
-        $ext      = [System.IO.Path]::GetExtension($filePath).ToLower()
-        $fileName = Split-Path $filePath -Leaf
+    if (-not (Test-Path $Destination)) { throw "Download produced no file: $Url" }
+    $mb = [Math]::Round((Get-Item $Destination).Length / 1MB, 1)
+    Write-Log ('Downloaded {0} MB in {1:n0}s ({2:n1} MB/s)' -f $mb, $sw.Elapsed.TotalSeconds, ($mb / [Math]::Max(1, $sw.Elapsed.TotalSeconds))) 'OK'
 
-        Write-Log "[$index/$total] $fileName"
+    if ($Sha256) {
+        $have = (Get-FileHash $Destination -Algorithm SHA256).Hash
+        if ($have -ne $Sha256.ToUpper()) {
+            Remove-Item $Destination -Force
+            throw "SHA256 mismatch for $(Split-Path $Url -Leaf). Expected $($Sha256.ToUpper()), got $have. File discarded."
+        }
+        Write-Log 'SHA256 verified.' 'OK'
+    }
+    else {
+        Write-Log 'Catalog supplied no hash for this pack - integrity unverified.' 'WARN'
+    }
+    return $Destination
+}
 
-        try {
-            switch ($ext) {
-                ".exe" {
-                    $proc = Start-Process -FilePath $filePath `
-                                         -ArgumentList "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES" `
-                                         -PassThru -Wait -NoNewWindow
-                    if ($proc.ExitCode -in @(0, 1, 3010)) {
-                        $label = if ($proc.ExitCode -eq 0) { "OK" } else { "OK (reboot needed)" }
-                        Write-Log "  $label (exit $($proc.ExitCode))" "SUCCESS"
-                        $Script:Installed++
-                    }
-                    else {
-                        Write-Log "  Retrying with /S (prev exit $($proc.ExitCode))..." "WARN"
-                        $proc2 = Start-Process -FilePath $filePath `
-                                               -ArgumentList "/S /NORESTART" `
-                                               -PassThru -Wait -NoNewWindow
-                        $label2 = if ($proc2.ExitCode -in @(0,1,3010)) { "OK on retry" } else { "Completed (exit $($proc2.ExitCode))" }
-                        Write-Log "  $label2" "SUCCESS"
-                        $Script:Installed++
-                    }
-                }
-                ".msi" {
-                    $proc = Start-Process "msiexec.exe" `
-                                         -ArgumentList "/i `"$filePath`" /qn /norestart" `
-                                         -PassThru -Wait -NoNewWindow
-                    $label = if ($proc.ExitCode -in @(0,3010)) { "MSI OK" } else { "MSI exit $($proc.ExitCode)" }
-                    Write-Log "  $label" "SUCCESS"
-                    $Script:Installed++
-                }
-                ".inf" {
-                    $proc = Start-Process "pnputil.exe" `
-                                         -ArgumentList "/add-driver `"$filePath`" /install" `
-                                         -PassThru -Wait -NoNewWindow
-                    $label = if ($proc.ExitCode -eq 0) { "INF staged OK" } else { "pnputil exit $($proc.ExitCode)" }
-                    Write-Log "  $label" "SUCCESS"
-                    $Script:Installed++
-                }
-                default {
-                    Write-Log "  Skipped unsupported type: $ext" "WARN"
-                    $Script:Skipped++
-                }
+function Expand-LenovoPack {
+    # Lenovo packs are Inno Setup self-extractors.
+    param(
+        [Parameter(Mandatory)][string]$ExePath,
+        [Parameter(Mandatory)][string]$TargetDir
+    )
+    if (Test-Path $TargetDir) { Remove-Item $TargetDir -Recurse -Force }
+    $null = New-Item $TargetDir -ItemType Directory -Force
+
+    Write-Log "Extracting to $TargetDir ..."
+    $p = Start-Process -FilePath $ExePath `
+            -ArgumentList '/VERYSILENT', "/DIR=`"$TargetDir`"", '/EXTRACT="YES"' `
+            -Wait -PassThru -NoNewWindow
+    if ($p.ExitCode -ne 0) { Write-Log "Extractor exit code $($p.ExitCode) (often benign)." 'WARN' }
+
+    $infs = @(Get-ChildItem $TargetDir -Filter *.inf -Recurse -File -ErrorAction SilentlyContinue)
+    if ($infs.Count -eq 0) {
+        throw "Extraction produced no INF files under $TargetDir. Pack may use a different extractor - try running it manually with /? to see switches."
+    }
+    Write-Log "Extracted $($infs.Count) INF files." 'OK'
+    return $infs.Count
+}
+
+function Remove-UnwantedDrivers {
+    <#  Trims categories that bloat an image without helping first boot.
+        Deliberately conservative: never touches storage, network, chipset,
+        graphics, audio, input or Bluetooth. #>
+    param([Parameter(Mandatory)][string]$Root)
+
+    $patterns = @('printer','fingerprint','smartcard','modem','wwan_firmware','dock_firmware','manual','doc$')
+    $removed = 0
+    foreach ($pat in $patterns) {
+        $dirs = @(Get-ChildItem $Root -Directory -Recurse -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -match $pat })
+        foreach ($d in $dirs) {
+            if (Test-Path $d.FullName) {
+                Write-Log "  pruning $($d.Name)"
+                Remove-Item $d.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                $removed++
             }
         }
-        catch {
-            Write-Log "  ERROR: $_" "ERROR"
-            $Script:Errors.Add("Install failed: $fileName")
-            $Script:Failed++
+    }
+    $left = @(Get-ChildItem $Root -Filter *.inf -Recurse -File -ErrorAction SilentlyContinue).Count
+    Write-Log "Pruned $removed folders; $left INFs remain."
+    return $left
+}
+
+function Get-DriverStoreCount {
+    @(& pnputil.exe /enum-drivers | Select-String -SimpleMatch 'Published Name').Count
+}
+
+function Add-DriversToStore {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$LogTag
+    )
+    $before = Get-DriverStoreCount
+    Write-Log "Driver store holds $before packages. Staging (this takes several minutes)..." 'STEP'
+
+    $out = & pnputil.exe /add-driver (Join-Path $Root '*.inf') /subdirs 2>&1
+    $logPath = Join-Path $LogDir "pnputil_$LogTag.log"
+    $out | Set-Content -LiteralPath $logPath -Encoding UTF8
+
+    $after  = Get-DriverStoreCount
+    $added  = $after - $before
+    $failed = @($out | Select-String -Pattern 'Failed|Adding driver package failed').Count
+
+    if ($added -le 0) {
+        throw "pnputil staged 0 packages. Review $logPath"
+    }
+    if ($failed -gt 0) {
+        Write-Log "$failed INF(s) reported failure - usually unsigned or wrong-arch. See $logPath" 'WARN'
+    }
+    Write-Log "Staged $added packages (store now $after)." 'OK'
+    return [pscustomobject]@{ Added = $added; Total = $after; Failed = $failed; Log = $logPath }
+}
+
+#endregion --------------------------------------------------------------------
+
+# --- Preflight ---------------------------------------------------------------
+
+Write-Log '=== Lenovo driver staging (pre-sysprep) ===' 'STEP'
+
+if (-not $OSVersion) {
+    $OSVersion = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').DisplayVersion
+    Write-Log "-OSVersion not supplied; using the running build: $OSVersion"
+}
+if ($FallbackOrder -notcontains $OSVersion) {
+    Write-Log "Running build '$OSVersion' isn't a known pack version; will fall back from 25H2." 'WARN'
+    $OSVersion = '25H2'
+}
+
+$freeGB = [Math]::Round((Get-PSDrive C).Free / 1GB, 1)
+Write-Log "Free space on C: $freeGB GB"
+if ($freeGB -lt 25) { Write-Log 'Under 25 GB free. Download + extract + driver store needs headroom.' 'WARN' }
+
+# --- Resolve -----------------------------------------------------------------
+
+$models = Get-LenovoCatalog -Url $CatalogUrl
+Write-Log "Catalog loaded: $($models.Count) models" 'OK'
+
+$model = Resolve-LenovoModel -Models $models -Type $MachineType -Name $ModelName
+$key   = if ($MachineType) { $MachineType.ToUpper() } else { ($model.Types.Type | Select-Object -First 1) }
+
+Write-Log "Matched: $($model.name)" 'OK'
+Write-Log "  arch  : $($model.arch)"
+Write-Log "  types : $(@($model.Types.Type) -join ', ')"
+
+# Build the work list. SCCM is mandatory; GFX is opt-in. HSA is always ignored
+# (those are Store/UWP Hardware Support Apps, not INF driver packages).
+$targets = @()
+
+$sccm = Select-DriverPack -ModelNode $model -ElementName 'SCCM' -Wanted $OSVersion
+if (-not $sccm) { throw "No Windows 11 SCCM driver pack published for $($model.name)." }
+$targets += [pscustomobject]@{ Kind = 'SCCM'; Node = $sccm; Brand = '' }
+
+$gfxAll = @($model.SelectNodes('GFX') | Where-Object { $_.os -eq 'win11' })
+if ($gfxAll.Count -gt 0) {
+    if ($IncludeGraphics) {
+        foreach ($brand in (@($gfxAll.brand) | Sort-Object -Unique)) {
+            $g = @($gfxAll | Where-Object { $_.brand -eq $brand -and $_.version -eq $sccm.version })
+            if ($g.Count -eq 0) { $g = @($gfxAll | Where-Object { $_.brand -eq $brand }) }
+            $targets += [pscustomobject]@{ Kind = 'GFX'; Node = $g[0]; Brand = $brand }
         }
+        Write-Log "Including $($targets.Count - 1) discrete graphics pack(s)."
+    }
+    else {
+        Write-Log "This model publishes a discrete <GFX> pack ($((@($gfxAll.brand) | Sort-Object -Unique) -join ',')). Without -IncludeGraphics you will get Basic Display Adapter on real hardware." 'WARN'
     }
 }
 
-# ---------------------------------------------------------------
-# DISM INJECTION HELPER
-# ---------------------------------------------------------------
-function Export-DismScript {
-    param([string]$MT)
-    $driverFolder = Join-Path $DownloadPath $MT
-    $dismScript   = Join-Path $DownloadPath "inject_drivers_${MT}.ps1"
-    @"
-# Auto-generated -- inject Lenovo drivers into an offline Windows image
-param(
-    [string]`$ImagePath  = "C:\Mount",
-    [string]`$DriverPath = "$driverFolder"
-)
-Write-Host "Injecting drivers for $MT into `$ImagePath ..." -ForegroundColor Cyan
-Dism /Image:"`$ImagePath" /Add-Driver /Driver:"`$DriverPath" /Recurse /ForceUnsigned
-Write-Host "Done." -ForegroundColor Green
-"@ | Set-Content -Path $dismScript -Encoding ASCII
-    Write-Log "DISM script saved: $dismScript" "SUCCESS"
+# Dedupe: Lenovo frequently points multiple version rows at one file.
+$seen = @{}
+$work = @()
+foreach ($t in $targets) {
+    $u = $t.Node.'#text'.Trim()
+    if ($seen.ContainsKey($u)) { Write-Log "Skipping duplicate URL for $($t.Kind)."; continue }
+    $seen[$u] = $true
+    $work += $t
 }
 
-# ---------------------------------------------------------------
-# SUMMARY
-# ---------------------------------------------------------------
-function Write-Summary {
-    param([string]$MT, [int]$Total)
-    Write-Host ""
-    Write-Host ("=" * 60) -ForegroundColor DarkCyan
-    Write-Host "  SUMMARY" -ForegroundColor Magenta
-    Write-Host ("=" * 60) -ForegroundColor DarkCyan
-    Write-Log "Machine Type : $MT"
-    Write-Log "OS Target    : $OSVersion"
-    Write-Log "Total Pkgs   : $Total"
-    Write-Log "Installed    : $Script:Installed" "SUCCESS"
-    Write-Log "Skipped      : $Script:Skipped"   "WARN"
-    Write-Log "Failed       : $Script:Failed"    $(if ($Script:Failed -gt 0) { "ERROR" } else { "SUCCESS" })
-    Write-Log "Saved to     : $(Join-Path $DownloadPath $MT)"
-    Write-Log "Log file     : $Script:LogFile"
-    if ($Script:Errors.Count -gt 0) {
-        Write-Host ""
-        Write-Log "Errors:" "ERROR"
-        foreach ($e in $Script:Errors) { Write-Log "  - $e" "ERROR" }
-    }
-    if (-not $InstallDrivers) {
-        Write-Host ""
-        Write-Log "Downloaded only. To install:" "WARN"
-        Write-Log "  .\LenovoDriverStager.ps1 -MachineType $MT -InstallDrivers" "INFO"
-        Write-Log "To DISM inject, run: inject_drivers_${MT}.ps1" "INFO"
-    }
-    Write-Host ("=" * 60) -ForegroundColor DarkCyan
-    Write-Host ""
+Write-Log "--- Plan ($($work.Count) pack(s)) ---" 'STEP'
+foreach ($t in $work) {
+    $u = $t.Node.'#text'.Trim()
+    Write-Log ('  [{0}{1}] win11 {2}  {3}  (published {4})' -f $t.Kind, $(if ($t.Brand) { "/$($t.Brand)" }), $t.Node.version, (Split-Path $u -Leaf), $t.Node.date)
 }
 
-# ---------------------------------------------------------------
-# MAIN
-# ---------------------------------------------------------------
-function Main {
-    Clear-Host
-    Write-Host ""
-    Write-Host ("+" + ("=" * 58) + "+") -ForegroundColor Magenta
-    Write-Host ("|    Lenovo Driver Stager -- FFU/Deployment Edition v4.0  |") -ForegroundColor Magenta
-    Write-Host ("+" + ("=" * 58) + "+") -ForegroundColor Magenta
-    Write-Host ""
-
-    Initialize-Environment
-
-    $MT = Get-MachineType
-
-    $locations = Get-CatalogLocations -MT $MT
-    if ($locations.Count -eq 0) { exit 1 }
-
-    $localFiles = Get-DriverPackages -Locations $locations -MT $MT
-
-    Export-DismScript -MT $MT
-
-    if ($InstallDrivers) {
-        Install-DriverPackages -FilePaths $localFiles
-    }
-
-    Write-Summary -MT $MT -Total $locations.Count
+if ($WhatIfOnly) {
+    foreach ($t in $work) { Write-Log ('URL: {0}' -f $t.Node.'#text'.Trim()) }
+    Write-Log 'WhatIfOnly - nothing downloaded or staged.' 'OK'
+    return
 }
 
-Main
+# --- Download / extract / stage ----------------------------------------------
+
+$results = @()
+foreach ($t in $work) {
+    $url  = $t.Node.'#text'.Trim()
+    $file = Split-Path $url -Leaf
+    $tag  = '{0}_{1}' -f $key, $t.Kind
+
+    Write-Log "--- Processing $($t.Kind) pack: $file ---" 'STEP'
+
+    $exe        = Get-VerifiedPack -Url $url -Sha256 $t.Node.crc -Destination (Join-Path $CacheRoot $file)
+    $extractDir = Join-Path $WorkRoot ($file -replace '\.exe$','')
+    $infCount   = Expand-LenovoPack -ExePath $exe -TargetDir $extractDir
+
+    if ($Prune -and $t.Kind -eq 'SCCM') { $infCount = Remove-UnwantedDrivers -Root $extractDir }
+
+    $staged = Add-DriversToStore -Root $extractDir -LogTag $tag
+
+    $results += [pscustomobject]@{
+        Kind          = $t.Kind
+        Brand         = $t.Brand
+        PackFile      = $file
+        PackVersion   = $t.Node.version
+        PackDate      = $t.Node.date
+        PackSha256    = $t.Node.crc
+        InfFiles      = $infCount
+        PackagesAdded = $staged.Added
+        Failures      = $staged.Failed
+    }
+
+    if (-not $KeepFiles) {
+        Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Log 'Removed extraction scratch.'
+    }
+}
+
+# --- Manifest ----------------------------------------------------------------
+
+$manifest = [pscustomobject]@{
+    StagedUtc     = (Get-Date).ToUniversalTime().ToString('s') + 'Z'
+    ScriptVersion = '2.0'
+    Vendor        = 'Lenovo'
+    Model         = $model.name
+    Architecture  = $model.arch
+    MachineTypes  = @($model.Types.Type)
+    TargetOS      = "win11 $OSVersion"
+    ImageBuild    = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').BuildLabEx
+    Pruned        = [bool]$Prune
+    Packs         = $results
+    StoreTotal    = Get-DriverStoreCount
+}
+$manifestPath = Join-Path $LogDir "manifest_$key.json"
+$manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+
+if (-not $KeepFiles -and (Test-Path $WorkRoot)) {
+    Remove-Item $WorkRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+Write-Log '=== COMPLETE ===' 'OK'
+Write-Log ('Model: {0} | packs: {1} | driver packages added: {2}' -f $model.name, $results.Count, (($results | Measure-Object PackagesAdded -Sum).Sum)) 'OK'
+Write-Log "Manifest: $manifestPath" 'OK'
+Write-Log "Cache retained at $CacheRoot - delete it before capture if it lives on the image volume." 'WARN'
+Write-Log 'NEXT: sysprep /generalize with PersistAllDeviceInstalls=true, or these drivers will be stripped.' 'WARN'
