@@ -108,6 +108,11 @@
 
         <AcceptEula>true</AcceptEula>
 
+        <!-- Suppress the product key screen entirely -->
+        <ProductKey>
+          <WillShowUI>Never</WillShowUI>
+        </ProductKey>
+
       </UserData>
 
     </component>
@@ -193,12 +198,12 @@
       <OOBE>
 
         <HideEULAPage>true</HideEULAPage>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
         <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
         <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
 
-        <SkipUserOOBE>true</SkipUserOOBE>
-        <SkipMachineOOBE>true</SkipMachineOOBE>
-
+        <NetworkLocation>Work</NetworkLocation>
         <ProtectYourPC>3</ProtectYourPC>
 
       </OOBE>
