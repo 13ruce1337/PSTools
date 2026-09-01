@@ -133,21 +133,13 @@ Use Microsoft's `oscdimg` utility (included with the Windows ADK Deployment Tool
 Run the following command in **PowerShell (Run as Administrator)**:
 
 ```powershell
-& "<PATH_TO_OSCDIMG>\oscdimg.exe" `
-  -m `
-  -o `
-  -u2 `
-  -udfs `
-  -bootdata:2#p0,e,b"<SOURCE_DIR>\boot\etfsboot.com"#pEF,e,b"<SOURCE_DIR>\efi\microsoft\boot\efisys_noprompt.bin" `
-  "<SOURCE_DIR>" `
-  "<OUTPUT_DIR>\<ISO_NAME>.iso"
+& "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe" -m -o -u2 -udfver102 "-bootdata:2#p0,e,b<SOURCE_DIR>\boot\etfsboot.com#pEF,e,b<SOURCE_DIR>\efi\microsoft\boot\efisys_noprompt.bin" "SOURCE_DIR" "ISO_NAME"
 ```
 
 ### Parameter Placeholders
 
 | Placeholder | Description | Example |
 | :--- | :--- | :--- |
-| `<PATH_TO_OSCDIMG>` | Full path to the directory containing `oscdimg.exe` | `C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg` |
 | `<SOURCE_DIR>` | Root directory containing the extracted ISO files and `autounattend.xml` | `D:\ISO_Build\Win10_Source` |
 | `<OUTPUT_DIR>` | Target folder where the generated `.iso` will be saved | `D:\ISOs` |
 | `<ISO_NAME>` | Desired filename for the output ISO | `Win10Pro_Unattended` |
