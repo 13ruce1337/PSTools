@@ -1,7 +1,6 @@
-# Alfred Pennyworth — IT Automation Script
-> **Version 1.01** | PowerShell Automation Toolkit
+# PSTools — PowerShell IT Toolkit
 
-Alfred is a PowerShell script that handles common IT tasks — installing, uninstalling, reinstalling, and troubleshooting applications and Windows — all from a single command.
+PSTools is a collection of standalone PowerShell scripts for everyday IT work. The library covers the application lifecycle (install, uninstall, reinstall, and troubleshoot), user deprovisioning in hybrid AD/Entra environments, provisioning Windows and Debian Hyper-V reference VMs, staging Lenovo drivers and pulling Meraki firmware inventory, and building unattended Windows installation media. Each script runs independently from the command line, so you can use them individually or wire them into your own automation.
 
 ---
 
