@@ -152,3 +152,11 @@ Run the following command in **PowerShell (Run as Administrator)**:
 * **`-bootdata:2...`**: Configures multi-platform boot headers:
   * `p0,e,b"...etfsboot.com"`: Legacy BIOS boot sector (Platform `0`).
   * `pEF,e,b"...efisys.bin"`: UEFI boot sector (Platform `EF`).
+
+### Creation of FFU
+1. **Harden VHDX**
+   Run the below command after copying the sysprep-ffu.xml into C:\Build\
+   Note this file will be removed
+   `C:\Windows\System32\Sysprep\sysprep.exe /generalize /oobe /shutdown /unattend:C:\Build\sysprep-ffu.xml`
+2. **Make FFU**
+   On the host or machine that has the VHDX run `make_ffu.ps1` after filling in the variables.
