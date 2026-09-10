@@ -159,47 +159,10 @@
                language="neutral"
                versionScope="nonSxS">
 
-      <AutoLogon>
-
-        <Enabled>true</Enabled>
-
-        <Username>Admin</Username>
-
-        <Password>
-          <Value>Password123!</Value>
-          <PlainText>true</PlainText>
-        </Password>
-
-        <LogonCount>1</LogonCount>
-
-      </AutoLogon>
-
-      <UserAccounts>
-
-        <LocalAccounts>
-
-          <LocalAccount wcm:action="add">
-
-            <Name>Admin</Name>
-            <DisplayName>Admin</DisplayName>
-            <Group>Administrators</Group>
-
-            <Password>
-              <Value>Password123!</Value>
-              <PlainText>true</PlainText>
-            </Password>
-
-          </LocalAccount>
-
-        </LocalAccounts>
-
-      </UserAccounts>
-
       <OOBE>
 
         <HideEULAPage>true</HideEULAPage>
         <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
-        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
         <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
         <HideLocalAccountScreen>true</HideLocalAccountScreen>
 

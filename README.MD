@@ -111,7 +111,7 @@ A transcript is started at launch and stopped on exit. Check this file for detai
 
 # Windows Unattended Reference Image & FFU Preparation Guide
 
-This guide details how to build an automated, bootable Windows 10/11 installation ISO using an answer file (`autounattend.xml`) and Microsoft's `oscdimg` deployment utility. The resulting VM boots straight to the desktop for rapid configuration prior to Sysprep and Full Flash Update (FFU) capture.
+This guide details how to build an automated, bootable Windows 10/11 installation ISO using an answer file (`autounattend.xml`) and Microsoft's `oscdimg` deployment utility. The VM is to create a deployment with drivers injected for Sysprep and Full Flash Update (FFU) capture.
 
 ## 1. Creating the Bootable Unattended ISO
 
@@ -152,7 +152,11 @@ Run the following command in **PowerShell (Run as Administrator)**:
   * `p0,e,b"...etfsboot.com"`: Legacy BIOS boot sector (Platform `0`).
   * `pEF,e,b"...efisys.bin"`: UEFI boot sector (Platform `EF`).
 
-### Creation of FFU
+## Provisioning the Windows VM
+* Run the provision_windows.ps1 script after filling in the variables.
+* This same script can be ran on the downloaded iso from windows directly if needed.
+
+## Creation of FFU
 1. **Harden VHDX**
    Run the below command after copying the sysprep-ffu.xml into C:\Build\
    Note this file will be removed
