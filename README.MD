@@ -109,16 +109,12 @@ A transcript is started at launch and stopped on exit. Check this file for detai
   
 ---  
 
-# Windows Unattended Reference Image & FFU Preparation Guide
+# Windows Unattended Reference Image
 
-This guide details how to build an automated, bootable Windows 10/11 installation ISO using an answer file (`autounattend.xml`) and Microsoft's `oscdimg` deployment utility. The VM is to create a deployment with drivers injected for Sysprep and Full Flash Update (FFU) capture.
+This guide details how to build an automated, bootable Windows 10/11 installation ISO using an answer file (`autounattend.xml`) and Microsoft's `oscdimg` deployment utility.
 
-## 1. Creating the Bootable Unattended ISO
-
-Use Microsoft's `oscdimg` utility (included with the Windows ADK Deployment Tools) to package the extracted Windows install files and `autounattend.xml` into a UEFI/BIOS dual-boot ISO with full UDF long-filename support.
 
 ### Prerequisites
-
 1. **Windows Assessment and Deployment Kit (ADK)**:
    Install the Windows ADK (which includes `oscdimg.exe` under Deployment Tools) via winget:
    ```powershell
@@ -126,6 +122,9 @@ Use Microsoft's `oscdimg` utility (included with the Windows ADK Deployment Tool
    ```
 2. **Source Media & Answer File**:
    A directory containing the extracted contents of the Windows installation ISO with your configured `autounattend.xml` placed in the root directory.
+
+## 1. Creating the Bootable Unattended ISO
+Use Microsoft's `oscdimg` utility (included with the Windows ADK Deployment Tools) to package the extracted Windows install files and `autounattend.xml` into a UEFI/BIOS dual-boot ISO with full UDF long-filename support.
 
 ### Command
 
@@ -152,6 +151,6 @@ Run the following command in **PowerShell (Run as Administrator)**:
   * `p0,e,b"...etfsboot.com"`: Legacy BIOS boot sector (Platform `0`).
   * `pEF,e,b"...efisys.bin"`: UEFI boot sector (Platform `EF`).
 
-## Provisioning the Windows VM
+## 2. Provisioning the Windows VM
 * Run the provision_windows.ps1 script after filling in the variables.
 * This same script can be ran on the downloaded iso from windows directly if needed.
