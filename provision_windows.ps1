@@ -1,11 +1,18 @@
 # --- CONFIGURATION ---
 
-$VMName          = "Win11-Reference"
-$ISOPath         = "C:\ISOs\Win11_Unattended.iso"
+$VMName                 = "Win11-Reference"
+$ISOPath                = "C:\ISOs\Win11_Unattended.iso"
 
-$VHDSizeGB       = 80
-$CPUCount        = 2
-$SwitchName      = "Default Switch"
+$VHDSizeGB              = 80
+$CPUCount               = 2
+
+# This is the switch you'll reconnect to LATER when you're ready
+# to give the VM internet/network access.
+$SwitchName             = "Default Switch"
+
+# The VM is attached to THIS switch during provisioning so it has
+# no internet or LAN access until you manually reconnect it.
+$ProvisioningSwitchName = "Provisioning-Isolated"
 
 # --- HYPER-V PATHS ---
 
@@ -16,6 +23,20 @@ $VHDPath = Join-Path (Get-VMHost).VirtualHardDiskPath "$VMName.vhdx"
 
 if (!(Test-Path $ISOPath)) {
     throw "Windows ISO not found: $ISOPath"
+}
+
+# --- CREATE ISOLATED PROVISIONING SWITCH IF NEEDED ---
+
+if (-not (Get-VMSwitch -Name $ProvisioningSwitchName -ErrorAction SilentlyContinue)) {
+
+    Write-Host "Creating isolated provisioning switch: $ProvisioningSwitchName"
+
+    New-VMSwitch `
+        -Name $ProvisioningSwitchName `
+        -SwitchType Private | Out-Null
+}
+else {
+    Write-Host "Using existing isolated provisioning switch: $ProvisioningSwitchName"
 }
 
 # --- CREATE VM DIRECTORY ---
@@ -47,12 +68,17 @@ if (-not (Get-VM -Name $VMName -ErrorAction SilentlyContinue)) {
         -Name $VMName `
         -MemoryStartupBytes 2GB `
         -Generation 2 `
-        -SwitchName $SwitchName `
+        -SwitchName $ProvisioningSwitchName `
         -VHDPath $VHDPath `
         -Path $VMPath | Out-Null
 }
 else {
     Write-Host "Using existing VM: $VMName"
+
+    # Make sure the VM's network adapter is on the isolated switch,
+    # even if the VM already existed from a previous run.
+    Get-VMNetworkAdapter -VMName $VMName |
+        Connect-VMNetworkAdapter -SwitchName $ProvisioningSwitchName
 }
 
 # --- VM CONFIGURATION ---
@@ -157,7 +183,11 @@ Write-Host ""
 Write-Host "================================="
 Write-Host "VM READY"
 Write-Host "================================="
-Write-Host "Name      : $VMName"
-Write-Host "VM Path   : $VMPath"
-Write-Host "VHD Path  : $VHDPath"
-Write-Host "Windows   : $ISOPath"
+Write-Host "Name        : $VMName"
+Write-Host "VM Path     : $VMPath"
+Write-Host "VHD Path    : $VHDPath"
+Write-Host "Windows     : $ISOPath"
+Write-Host "Network     : $ProvisioningSwitchName (isolated, no internet)"
+Write-Host ""
+Write-Host "When you're ready to give this VM internet access, run:"
+Write-Host "  Get-VMNetworkAdapter -VMName $VMName | Connect-VMNetworkAdapter -SwitchName '$SwitchName'"
