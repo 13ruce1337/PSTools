@@ -155,11 +155,3 @@ Run the following command in **PowerShell (Run as Administrator)**:
 ## Provisioning the Windows VM
 * Run the provision_windows.ps1 script after filling in the variables.
 * This same script can be ran on the downloaded iso from windows directly if needed.
-
-## Creation of FFU
-1. **Harden VHDX**
-   Run the below command after copying the sysprep-ffu.xml into C:\Build\
-   Note this file will be removed
-   `C:\Windows\System32\Sysprep\sysprep.exe /generalize /oobe /shutdown /unattend:C:\Build\sysprep-ffu.xml`
-2. **Make FFU**
-   On the host or machine that has the VHDX run `make_ffu.ps1` after filling in the variables.
