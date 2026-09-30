@@ -134,6 +134,16 @@
 
     </component>
 
+    <component name="Microsoft-Windows-SecureStartup-FilterDriver"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+
+      <PreventDeviceEncryption>true</PreventDeviceEncryption>
+
+    </component>
+
   </settings>
 
   <!-- OOBE -->
