@@ -3,8 +3,7 @@
 # requires cloud debian converted to vhdx placed in the correct folder
 
 param(
-    [Parameter(Mandatory=$true)]
-    [string]$VMName,
+    [string]$VMName   = "Debian-Server",
 
     [Parameter(Mandatory=$true)]
     [string]$RootPass,
