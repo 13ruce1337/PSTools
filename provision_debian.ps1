@@ -212,7 +212,16 @@ function Test-ProvisionedVhd {
         $parts   = @(Get-Partition -DiskNumber $diskNum -ErrorAction Stop)
 
         Write-Host "  Partition style: $($disk.PartitionStyle)"
-        $parts | Format-Table PartitionNumber, Type, @{Name='SizeMB'; Expression={[math]::Round($_.Size / $BytesPerMB, 0)}}, GptType -AutoSize | Out-Host
+
+        $partRows = foreach ($p in $parts) {
+            [pscustomobject]@{
+                PartitionNumber = $p.PartitionNumber
+                Type            = $p.Type
+                SizeMB          = [math]::Round($p.Size / $BytesPerMB, 0)
+                GptType         = $p.GptType
+            }
+        }
+        $partRows | Format-Table -AutoSize -Property PartitionNumber, Type, SizeMB, GptType | Out-Host
 
         if ($disk.PartitionStyle -ne 'GPT') {
             Write-Host "  FAIL: expected a GPT partition table but found $($disk.PartitionStyle)."
