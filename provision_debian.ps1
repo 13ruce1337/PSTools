@@ -1,6 +1,11 @@
 # provision_debian.ps1
 # Provisions a Debian 12 VM on Hyper-V using a cloud-init seed ISO.
 #
+# Usage:
+#   .\provision_debian.ps1 MyPass                 # VM name defaults to Debian-Server
+#   .\provision_debian.ps1 MyPass WebBox          # password, then VM name
+#   .\provision_debian.ps1 MyPass -CPUs 2 -RamGB 4
+#
 # Requirements (offered for install via winget if missing):
 #   - Windows ADK "Deployment Tools" (oscdimg.exe) to build the seed ISO
 #   - qemu-img (QEMU) to convert the Debian qcow2 image to VHDX
@@ -11,10 +16,11 @@
 #Requires -RunAsAdministrator
 
 param(
-    [string]$VMName   = "Debian-Server",
-
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$true, Position=0)]
     [string]$RootPass,
+
+    [Parameter(Position=1)]
+    [string]$VMName   = "Debian-Server",
 
     [int]   $CPUs     = 1,
     [int]   $RamGB    = 2,
