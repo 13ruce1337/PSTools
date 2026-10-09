@@ -295,6 +295,17 @@ if ($LASTEXITCODE -ne 0) {
 # The downloaded image is no longer needed
 Remove-Item -Force $ImageFile -ErrorAction SilentlyContinue
 
+# qemu-img on Windows writes the VHDX as an NTFS sparse file. Hyper-V refuses to
+# resize or attach sparse VHDX files, so clear the sparse attribute.
+Write-Host "Clearing sparse flag on VHDX..."
+& fsutil.exe sparse setflag $VhdPath 0 | Out-Null
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: could not clear the sparse flag on $VhdPath (fsutil exit code $LASTEXITCODE)"
+    Remove-ProvisionArtifacts -IncludeVhd
+    exit 1
+}
+
 # --- RESIZE DISK --------------------------------------------------------------
 $currentSize = [int64](Get-VHD -Path $VhdPath).Size
 $targetSize  = [int64]$DiskGB * $BytesPerGB
@@ -309,7 +320,13 @@ if ($targetSize -lt $currentSize) {
 if ($targetSize -gt $currentSize) {
     $currentGBRounded = [math]::Round($currentSize / $BytesPerGB, 1)
     Write-Host "Resizing disk from ${currentGBRounded}GB to ${DiskGB}GB..."
-    Resize-VHD -Path $VhdPath -SizeBytes $targetSize
+    try {
+        Resize-VHD -Path $VhdPath -SizeBytes $targetSize -ErrorAction Stop
+    } catch {
+        Write-Host "ERROR: disk resize failed: $($_.Exception.Message)"
+        Remove-ProvisionArtifacts -IncludeVhd
+        exit 1
+    }
 } else {
     Write-Host "Disk already at ${DiskGB}GB -- skipping resize"
 }
