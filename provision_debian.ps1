@@ -2,6 +2,7 @@
 # Provisions a Debian 12 VM on Hyper-V using a cloud-init seed ISO.
 #
 # Usage:
+#   .\provision_debian.ps1                        # prompts for the root password (masked)
 #   .\provision_debian.ps1 MyPass                 # VM name defaults to Debian-Server
 #   .\provision_debian.ps1 MyPass WebBox          # password, then VM name
 #   .\provision_debian.ps1 MyPass -CPUs 2 -RamGB 4
@@ -16,7 +17,7 @@
 #Requires -RunAsAdministrator
 
 param(
-    [Parameter(Mandatory=$true, Position=0)]
+    [Parameter(Position=0)]
     [string]$RootPass,
 
     [Parameter(Position=1)]
@@ -28,6 +29,31 @@ param(
 
     [string]$ImageUrl = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
 )
+
+# --- PROMPT FOR PASSWORD IF NOT SUPPLIED --------------------------------------
+if ([string]::IsNullOrEmpty($RootPass)) {
+    $secure  = Read-Host "Enter root password" -AsSecureString
+    $confirm = Read-Host "Confirm root password" -AsSecureString
+
+    $bstr1 = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    $bstr2 = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($confirm)
+    try {
+        $RootPass        = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr1)
+        $RootPassConfirm = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr2)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr1)
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr2)
+    }
+
+    if ([string]::IsNullOrEmpty($RootPass)) {
+        Write-Host "ERROR: password cannot be empty."
+        exit 1
+    }
+    if ($RootPass -cne $RootPassConfirm) {
+        Write-Host "ERROR: passwords do not match."
+        exit 1
+    }
+}
 
 # --- CONFIG -------------------------------------------------------------------
 $BytesPerGB = [int64]1024 * 1024 * 1024
