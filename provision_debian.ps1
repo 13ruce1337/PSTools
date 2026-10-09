@@ -204,8 +204,6 @@ if ($hbOk) {
     Write-Host "Eject the DVD and delete the ISO manually once the VM has booted."
 }
 
-$vmInfo = Get-VM -Name $VMName
-
 Write-Host ""
 Write-Host "Done."
 Write-Host "  VM:       $VMName"
@@ -214,4 +212,6 @@ Write-Host "  RAM:      ${RamGB}GB"
 Write-Host "  Disk:     ${DiskGB}GB"
 Write-Host "  Connect:  ssh root@<vm-ip>"
 Write-Host ""
-$vmInfo | Format-Table -AutoSize -Property Name, State, CPUUsage, MemoryAssigned, Uptime, Status, Version
+
+$vmColumns = @('Name', 'State', 'CPUUsage', 'MemoryAssigned', 'Uptime', 'Status', 'Version')
+Get-VM -Name $VMName | Format-Table -AutoSize -Property $vmColumns | Out-Host
