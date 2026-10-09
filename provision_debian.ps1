@@ -13,7 +13,8 @@
 #
 # The Debian cloud image is downloaded to a temp folder, converted to a fixed
 # VHD with qemu-img, then converted to the VM's dynamic VHDX with Hyper-V's own
-# Convert-VHD. The temporary files are removed when done.
+# Convert-VHD. The resulting VHDX is verified before the VM is created, and the
+# temporary files are removed when done.
 
 #Requires -RunAsAdministrator
 
@@ -58,6 +59,7 @@ if ([string]::IsNullOrEmpty($RootPass)) {
 
 # --- CONFIG -------------------------------------------------------------------
 $BytesPerGB = [int64]1024 * 1024 * 1024
+$BytesPerMB = [int64]1024 * 1024
 $BlockSize  = [uint32]1048576
 $TempRoot   = Join-Path $env:TEMP "vm-provision"
 $ImageName  = [System.IO.Path]::GetFileName(([uri]$ImageUrl).AbsolutePath)
@@ -77,6 +79,9 @@ $QemuImgPath = Join-Path $env:ProgramFiles "qemu\qemu-img.exe"
 $AdkWingetId      = "Microsoft.WindowsADK"
 $AdkWingetOverride = "/quiet /norestart /features OptionId.DeploymentTools"
 $QemuWingetId     = "SoftwareFreedomConservancy.QEMU"
+
+# GPT partition type GUID for an EFI System Partition
+$EfiPartitionGuid = '{c12a7328-f81f-11d2-ba4b-00a0c93dc93c}'
 # ------------------------------------------------------------------------------
 
 # --- HELPERS ------------------------------------------------------------------
@@ -151,6 +156,89 @@ function Remove-ProvisionArtifacts {
         Remove-Item -Force $VhdPath        -ErrorAction SilentlyContinue
     }
 }
+
+# Writes a text file with LF line endings and UTF-8 (no BOM). The guest is Linux,
+# and CRLF line endings from PowerShell here-strings can break cloud-init files.
+function Write-LfFile {
+    param([string]$Path, [string]$Content)
+    $text = ($Content -replace "`r`n", "`n").TrimEnd("`n") + "`n"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $text, $utf8NoBom)
+}
+
+# Checks that the converted VHDX is a healthy, non-sparse, dynamic VHDX with a
+# sensible GPT partition layout. Returns $true if the disk looks good.
+function Test-ProvisionedVhd {
+    param([string]$Path)
+
+    if (-not (Test-VHD -Path $Path -ErrorAction SilentlyContinue)) {
+        Write-Host "  FAIL: Test-VHD says this is not a valid, healthy virtual disk."
+        return $false
+    }
+    Write-Host "  OK: Test-VHD passed"
+
+    $vhd = Get-VHD -Path $Path
+    $sizeGB = [math]::Round($vhd.Size / $BytesPerGB, 1)
+    $fileMB = [math]::Round($vhd.FileSize / $BytesPerMB, 0)
+    Write-Host "  Format: $($vhd.VhdFormat), Type: $($vhd.VhdType), Virtual size: ${sizeGB}GB, File size: ${fileMB}MB"
+
+    if ($vhd.VhdFormat -ne 'VHDX') {
+        Write-Host "  FAIL: expected a VHDX but found $($vhd.VhdFormat)."
+        return $false
+    }
+    if ($vhd.VhdType -ne 'Dynamic') {
+        Write-Host "  FAIL: expected a Dynamic disk but found $($vhd.VhdType)."
+        return $false
+    }
+    if ($vhd.FileSize -lt (100 * $BytesPerMB)) {
+        Write-Host "  FAIL: the VHDX file is only ${fileMB}MB, so the image data was not written."
+        return $false
+    }
+    Write-Host "  OK: format, type, and data size look right"
+
+    $sparseInfo = (& fsutil.exe sparse queryflag $Path 2>&1) -join ' '
+    if ($sparseInfo -notmatch 'NOT set') {
+        Write-Host "  FAIL: the VHDX is marked as an NTFS sparse file, which Hyper-V cannot use."
+        return $false
+    }
+    Write-Host "  OK: file is not sparse"
+
+    $mounted = $false
+    try {
+        $mount   = Mount-VHD -Path $Path -ReadOnly -NoDriveLetter -Passthru -ErrorAction Stop
+        $mounted = $true
+        $diskNum = $mount.DiskNumber
+        $disk    = Get-Disk -Number $diskNum -ErrorAction Stop
+        $parts   = @(Get-Partition -DiskNumber $diskNum -ErrorAction Stop)
+
+        Write-Host "  Partition style: $($disk.PartitionStyle)"
+        $parts | Format-Table PartitionNumber, Type, @{Name='SizeMB'; Expression={[math]::Round($_.Size / $BytesPerMB, 0)}}, GptType -AutoSize | Out-Host
+
+        if ($disk.PartitionStyle -ne 'GPT') {
+            Write-Host "  FAIL: expected a GPT partition table but found $($disk.PartitionStyle)."
+            return $false
+        }
+        $esp  = $parts | Where-Object { $_.GptType -eq $EfiPartitionGuid }
+        $root = $parts | Where-Object { $_.Size -gt $BytesPerGB }
+        if (-not $esp) {
+            Write-Host "  FAIL: no EFI System Partition found, so a Generation 2 VM cannot boot it."
+            return $false
+        }
+        if (-not $root) {
+            Write-Host "  FAIL: no root partition larger than 1GB found."
+            return $false
+        }
+        Write-Host "  OK: GPT with an EFI System Partition and a root partition"
+    } catch {
+        Write-Host "  Warning: could not mount the VHDX to inspect partitions: $($_.Exception.Message)"
+    } finally {
+        if ($mounted) {
+            Dismount-VHD -Path $Path -ErrorAction SilentlyContinue
+        }
+    }
+
+    return $true
+}
 # ------------------------------------------------------------------------------
 
 # --- GUARD --------------------------------------------------------------------
@@ -205,12 +293,12 @@ if (-not (Test-Path $WorkDir)) {
 # --- WRITE CLOUD-INIT CONFIGS -------------------------------------------------
 Write-Host "Writing cloud-init configs..."
 
-Set-Content -Path (Join-Path $WorkDir "meta-data") -Value @"
+Write-LfFile -Path (Join-Path $WorkDir "meta-data") -Content @"
 instance-id: $VMName
 local-hostname: $VMName
 "@
 
-Set-Content -Path (Join-Path $WorkDir "user-data") -Value @"
+Write-LfFile -Path (Join-Path $WorkDir "user-data") -Content @"
 #cloud-config
 
 hostname: $VMName
@@ -240,7 +328,7 @@ runcmd:
   - systemctl restart ssh
 "@
 
-Set-Content -Path (Join-Path $WorkDir "network-config") -Value @"
+Write-LfFile -Path (Join-Path $WorkDir "network-config") -Content @"
 version: 2
 ethernets:
   eth0:
@@ -329,6 +417,15 @@ try {
 
 # The temporary fixed VHD is no longer needed
 Remove-Item -Force $TempVhd -ErrorAction SilentlyContinue
+
+# --- VERIFY VHDX --------------------------------------------------------------
+Write-Host "Verifying VHDX..."
+
+if (-not (Test-ProvisionedVhd -Path $VhdPath)) {
+    Write-Host "ERROR: the converted VHDX failed verification. Not creating the VM."
+    Remove-ProvisionArtifacts -IncludeVhd
+    exit 1
+}
 
 # --- RESIZE DISK --------------------------------------------------------------
 # Note: the partition table's backup GPT header will not be at the end of the
