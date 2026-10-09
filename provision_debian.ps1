@@ -9,10 +9,11 @@
 #
 # Requirements (offered for install via winget if missing):
 #   - Windows ADK "Deployment Tools" (oscdimg.exe) to build the seed ISO
-#   - qemu-img (QEMU) to convert the Debian qcow2 image to VHDX
+#   - qemu-img (QEMU) to convert the Debian qcow2 image to a fixed VHD
 #
-# The Debian cloud image is downloaded to a temp folder, converted directly
-# into the VM's VHDX, and the temporary files are removed when done.
+# The Debian cloud image is downloaded to a temp folder, converted to a fixed
+# VHD with qemu-img, then converted to the VM's dynamic VHDX with Hyper-V's own
+# Convert-VHD. The temporary files are removed when done.
 
 #Requires -RunAsAdministrator
 
@@ -57,9 +58,11 @@ if ([string]::IsNullOrEmpty($RootPass)) {
 
 # --- CONFIG -------------------------------------------------------------------
 $BytesPerGB = [int64]1024 * 1024 * 1024
+$BlockSize  = [uint32]1048576
 $TempRoot   = Join-Path $env:TEMP "vm-provision"
 $ImageName  = [System.IO.Path]::GetFileName(([uri]$ImageUrl).AbsolutePath)
 $ImageFile  = Join-Path $TempRoot $ImageName
+$TempVhd    = Join-Path $TempRoot "$VMName-temp.vhd"
 $WorkDir    = Join-Path $TempRoot $VMName
 $SeedIso    = Join-Path $TempRoot "$VMName-seed.iso"
 $VMRoot     = (Get-VMHost).VirtualMachinePath
@@ -143,6 +146,7 @@ function Remove-ProvisionArtifacts {
     Remove-Item -Recurse -Force $WorkDir   -ErrorAction SilentlyContinue
     Remove-Item -Force $SeedIso            -ErrorAction SilentlyContinue
     Remove-Item -Force $ImageFile          -ErrorAction SilentlyContinue
+    Remove-Item -Force $TempVhd            -ErrorAction SilentlyContinue
     if ($IncludeVhd) {
         Remove-Item -Force $VhdPath        -ErrorAction SilentlyContinue
     }
@@ -178,7 +182,7 @@ if (-not $OscdImg) {
 
 $QemuImg = Find-QemuImg
 if (-not $QemuImg) {
-    if (Confirm-Install -Name "QEMU (qemu-img)" -Purpose "convert the Debian cloud image to VHDX") {
+    if (Confirm-Install -Name "QEMU (qemu-img)" -Purpose "convert the Debian cloud image to a VHD") {
         Install-WithWinget -Id $QemuWingetId -Name "QEMU (qemu-img)" -Override $null | Out-Null
         $QemuImg = Find-QemuImg
     }
@@ -275,38 +279,56 @@ try {
     $ProgressPreference = $previousProgress
 }
 
-# --- CONVERT IMAGE TO VHDX ----------------------------------------------------
-Write-Host "Converting image to VHDX at $VhdPath..."
+# --- CONVERT IMAGE TO FIXED VHD (qemu-img) ------------------------------------
+Write-Host "Converting image to a temporary fixed VHD..."
 
 $QemuArgs = @(
     'convert',
-    '-O', 'vhdx',
+    '-f', 'qcow2',
+    '-O', 'vpc',
+    '-o', 'subformat=fixed,force_size',
     $ImageFile,
-    $VhdPath
+    $TempVhd
 )
 & $QemuImg @QemuArgs
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: qemu-img failed with exit code $LASTEXITCODE"
-    Remove-ProvisionArtifacts -IncludeVhd
+    Remove-ProvisionArtifacts
     exit 1
 }
 
 # The downloaded image is no longer needed
 Remove-Item -Force $ImageFile -ErrorAction SilentlyContinue
 
-# qemu-img on Windows writes the VHDX as an NTFS sparse file. Hyper-V refuses to
-# resize or attach sparse VHDX files, so clear the sparse attribute.
-Write-Host "Clearing sparse flag on VHDX..."
-& fsutil.exe sparse setflag $VhdPath 0 | Out-Null
+# qemu-img on Windows may write its output as an NTFS sparse file. Hyper-V
+# refuses to open sparse virtual disks, so clear the sparse attribute.
+& fsutil.exe sparse setflag $TempVhd 0 | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR: could not clear the sparse flag on $VhdPath (fsutil exit code $LASTEXITCODE)"
+    Write-Host "ERROR: could not clear the sparse flag on $TempVhd (fsutil exit code $LASTEXITCODE)"
+    Remove-ProvisionArtifacts
+    exit 1
+}
+
+# --- CONVERT FIXED VHD TO DYNAMIC VHDX (Hyper-V) ------------------------------
+Write-Host "Converting to dynamic VHDX with Hyper-V at $VhdPath..."
+
+try {
+    Convert-VHD -Path $TempVhd -DestinationPath $VhdPath -VHDType Dynamic -BlockSizeBytes $BlockSize -ErrorAction Stop
+} catch {
+    Write-Host "ERROR: Convert-VHD failed: $($_.Exception.Message)"
     Remove-ProvisionArtifacts -IncludeVhd
     exit 1
 }
 
+# The temporary fixed VHD is no longer needed
+Remove-Item -Force $TempVhd -ErrorAction SilentlyContinue
+
 # --- RESIZE DISK --------------------------------------------------------------
+# Note: the partition table's backup GPT header will not be at the end of the
+# grown disk until the guest fixes it. Debian cloud images do this on first boot
+# (cloud-init growpart), so a kernel "alternate GPT header" message is expected.
 $currentSize = [int64](Get-VHD -Path $VhdPath).Size
 $targetSize  = [int64]$DiskGB * $BytesPerGB
 
