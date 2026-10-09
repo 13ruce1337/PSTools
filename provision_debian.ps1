@@ -1,4 +1,4 @@
-# provision-vm.ps1
+# provision_debian.ps1
 # requires ADK installed
 # requires cloud debian converted to vhdx placed in the correct folder
 
@@ -6,19 +6,22 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$VMName,
 
+    [Parameter(Mandatory=$true)]
+    [string]$RootPass,
+
     [int]   $CPUs     = 1,
     [int]   $RamGB    = 2,
-    [int]   $DiskGB   = 20,
-    [string]$RootPass = "changeme123"
+    [int]   $DiskGB   = 20
 )
 
 # --- CONFIG -------------------------------------------------------------------
 $BaseVHDX  = "$env:USERPROFILE\Images\debian-12-base.vhdx"
-$SeedsDir  = "$env:USERPROFILE\Seeds"
+$TempRoot  = "$env:TEMP\vm-provision"
+$WorkDir   = "$TempRoot\$VMName"
+$SeedIso   = "$TempRoot\$VMName-seed.iso"
 $VMRoot    = (Get-VMHost).VirtualMachinePath
 $VHDRoot   = (Get-VMHost).VirtualHardDiskPath
 $Switch    = "Default Switch"
-$WorkDir   = "$env:TEMP\vm-provision\$VMName"
 $OscdImg   = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
 # ------------------------------------------------------------------------------
 
@@ -48,10 +51,8 @@ if (-not (Test-Path $OscdImg)) {
 }
 
 # --- SETUP DIRS ---------------------------------------------------------------
-foreach ($dir in @($WorkDir, $SeedsDir)) {
-    if (-not (Test-Path $dir)) {
-        New-Item -ItemType Directory -Path $dir -Force | Out-Null
-    }
+if (-not (Test-Path $WorkDir)) {
+    New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
 }
 
 # --- WRITE CLOUD-INIT CONFIGS -------------------------------------------------
@@ -97,13 +98,17 @@ ethernets:
 # --- BUILD SEED ISO -----------------------------------------------------------
 Write-Host "Building seed ISO..."
 
-$SeedIso = "$SeedsDir\$VMName-seed.iso"
 & $OscdImg -j1 -lcidata $WorkDir $SeedIso
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: oscdimg failed with exit code $LASTEXITCODE"
+    Remove-Item -Recurse -Force $WorkDir -ErrorAction SilentlyContinue
+    Remove-Item -Force $SeedIso -ErrorAction SilentlyContinue
     exit 1
 }
+
+# Config source files (which contain the password) are no longer needed
+Remove-Item -Recurse -Force $WorkDir
 
 # --- COPY AND RESIZE BASE IMAGE -----------------------------------------------
 Write-Host "Copying base image..."
@@ -159,10 +164,37 @@ while ((Get-VM -Name $VMName).State -eq 'Off') {
     $elapsed++
 }
 
-$vm = Get-VM -Name $VMName
+# --- WAIT FOR GUEST OS, THEN REMOVE SEED ISO ----------------------------------
+# cloud-init reads the seed very early in first boot. Once the guest heartbeat
+# is up, the seed has been consumed and the ISO is no longer needed.
+Write-Host "Waiting for guest heartbeat before removing seed ISO..."
+$hbTimeout = 300
+$hbElapsed = 0
+$hbOk      = $false
+while ($hbElapsed -lt $hbTimeout) {
+    $hb = Get-VMIntegrationService -VMName $VMName -Name 'Heartbeat' -ErrorAction SilentlyContinue
+    if ($hb -and $hb.PrimaryStatusDescription -eq 'OK') {
+        $hbOk = $true
+        break
+    }
+    Start-Sleep -Seconds 2
+    $hbElapsed += 2
+}
 
-# --- CLEANUP ------------------------------------------------------------------
-Remove-Item -Recurse -Force $WorkDir
+if ($hbOk) {
+    Write-Host "Guest is up. Ejecting and deleting seed ISO..."
+    Get-VMDvdDrive -VMName $VMName | Set-VMDvdDrive -Path $null
+    Remove-Item -Force $SeedIso -ErrorAction SilentlyContinue
+    if (Test-Path $SeedIso) {
+        Write-Host "Warning: could not delete seed ISO at $SeedIso"
+    }
+} else {
+    Write-Host "Warning: no guest heartbeat within $hbTimeout seconds -- leaving seed ISO in place at:"
+    Write-Host "  $SeedIso"
+    Write-Host "Eject the DVD and delete the ISO manually once the VM has booted."
+}
+
+$vm = Get-VM -Name $VMName
 
 Write-Host ""
 Write-Host "Done."
@@ -170,7 +202,6 @@ Write-Host "  VM:       $VMName"
 Write-Host "  CPU:      $CPUs"
 Write-Host "  RAM:      ${RamGB}GB"
 Write-Host "  Disk:     ${DiskGB}GB"
-Write-Host "  Password: $RootPass"
 Write-Host "  Connect:  ssh root@<vm-ip>"
 Write-Host ""
 $vm | Format-Table Name, State, CPUUsage, MemoryAssigned, Uptime, Status, Version
