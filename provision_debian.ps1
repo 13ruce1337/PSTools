@@ -1,6 +1,14 @@
 # provision_debian.ps1
-# requires ADK installed
-# requires cloud debian converted to vhdx placed in the correct folder
+# Provisions a Debian 12 VM on Hyper-V using a cloud-init seed ISO.
+#
+# Requirements (offered for install via winget if missing):
+#   - Windows ADK "Deployment Tools" (oscdimg.exe) to build the seed ISO
+#   - qemu-img (QEMU) to convert the Debian qcow2 image to VHDX
+#
+# The Debian cloud image is downloaded to a temp folder, converted directly
+# into the VM's VHDX, and the temporary files are removed when done.
+
+#Requires -RunAsAdministrator
 
 param(
     [string]$VMName   = "Debian-Server",
@@ -10,19 +18,103 @@ param(
 
     [int]   $CPUs     = 1,
     [int]   $RamGB    = 2,
-    [int]   $DiskGB   = 20
+    [int]   $DiskGB   = 20,
+
+    [string]$ImageUrl = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
 )
 
 # --- CONFIG -------------------------------------------------------------------
 $BytesPerGB = [int64]1024 * 1024 * 1024
-$BaseVHDX   = Join-Path $env:USERPROFILE "Images\debian-12-base.vhdx"
 $TempRoot   = Join-Path $env:TEMP "vm-provision"
+$ImageName  = [System.IO.Path]::GetFileName(([uri]$ImageUrl).AbsolutePath)
+$ImageFile  = Join-Path $TempRoot $ImageName
 $WorkDir    = Join-Path $TempRoot $VMName
 $SeedIso    = Join-Path $TempRoot "$VMName-seed.iso"
 $VMRoot     = (Get-VMHost).VirtualMachinePath
 $VHDRoot    = (Get-VMHost).VirtualHardDiskPath
+$VhdPath    = Join-Path $VHDRoot "$VMName.vhdx"
 $Switch     = "Default Switch"
-$OscdImg    = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
+
+$ProgramFilesX86 = ${env:ProgramFiles(x86)}
+$OscdImgPath = Join-Path $ProgramFilesX86 "Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
+$QemuImgPath = Join-Path $env:ProgramFiles "qemu\qemu-img.exe"
+
+$AdkWingetId      = "Microsoft.WindowsADK"
+$AdkWingetOverride = "/quiet /norestart /features OptionId.DeploymentTools"
+$QemuWingetId     = "SoftwareFreedomConservancy.QEMU"
+# ------------------------------------------------------------------------------
+
+# --- HELPERS ------------------------------------------------------------------
+function Update-SessionPath {
+    $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $user    = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $env:Path = "$machine;$user"
+}
+
+function Find-Oscdimg {
+    if (Test-Path $OscdImgPath) { return $OscdImgPath }
+    $cmd = Get-Command "oscdimg.exe" -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    return $null
+}
+
+function Find-QemuImg {
+    $cmd = Get-Command "qemu-img.exe" -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    if (Test-Path $QemuImgPath) { return $QemuImgPath }
+    return $null
+}
+
+function Confirm-Install {
+    param([string]$Name, [string]$Purpose)
+    Write-Host ""
+    Write-Host "$Name was not found. It is needed to $Purpose."
+    $answer = Read-Host "Install $Name now using winget? [Y/n]"
+    return ($answer -eq '' -or $answer -match '^(y|yes)$')
+}
+
+function Install-WithWinget {
+    param([string]$Id, [string]$Name, [string]$Override)
+
+    if (-not (Get-Command "winget.exe" -ErrorAction SilentlyContinue)) {
+        Write-Host "ERROR: winget is not available on this machine, so $Name cannot be installed automatically."
+        return $false
+    }
+
+    $wingetArgs = @(
+        'install',
+        '--id', $Id,
+        '--exact',
+        '--source', 'winget',
+        '--accept-package-agreements',
+        '--accept-source-agreements'
+    )
+    if ($Override) {
+        $wingetArgs += @('--override', $Override)
+    }
+
+    Write-Host "Installing $Name (winget id: $Id)..."
+    & winget.exe @wingetArgs | Out-Host
+    $exitCode = $LASTEXITCODE
+
+    Update-SessionPath
+
+    if ($exitCode -ne 0) {
+        Write-Host "Warning: winget exited with code $exitCode while installing $Name."
+        return $false
+    }
+    return $true
+}
+
+function Remove-ProvisionArtifacts {
+    param([switch]$IncludeVhd)
+    Remove-Item -Recurse -Force $WorkDir   -ErrorAction SilentlyContinue
+    Remove-Item -Force $SeedIso            -ErrorAction SilentlyContinue
+    Remove-Item -Force $ImageFile          -ErrorAction SilentlyContinue
+    if ($IncludeVhd) {
+        Remove-Item -Force $VhdPath        -ErrorAction SilentlyContinue
+    }
+}
 # ------------------------------------------------------------------------------
 
 # --- GUARD --------------------------------------------------------------------
@@ -31,22 +123,41 @@ if (Get-VM -Name $VMName -ErrorAction SilentlyContinue) {
     exit 0
 }
 
-# --- VALIDATE TOOLS -----------------------------------------------------------
-if (-not (Test-Path $BaseVHDX)) {
-    Write-Host "ERROR: Base image not found at $BaseVHDX"
-    Write-Host "Run setup-base-image.sh on your Ubuntu box and scp the result to $BaseVHDX"
+# --- VALIDATE / INSTALL TOOLS -------------------------------------------------
+$OscdImg = Find-Oscdimg
+if (-not $OscdImg) {
+    if (Confirm-Install -Name "Windows ADK (Deployment Tools)" -Purpose "build the cloud-init seed ISO (oscdimg.exe)") {
+        Install-WithWinget -Id $AdkWingetId -Name "Windows ADK (Deployment Tools)" -Override $AdkWingetOverride | Out-Null
+        $OscdImg = Find-Oscdimg
+    }
+}
+
+if (-not $OscdImg) {
+    Write-Host "ERROR: oscdimg.exe not found."
+    Write-Host ""
+    Write-Host "Expected path:"
+    Write-Host "  $OscdImgPath"
+    Write-Host ""
+    Write-Host "Install the ADK manually from:"
+    Write-Host "  https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install"
+    Write-Host "Only the 'Deployment Tools' feature is required."
     exit 1
 }
 
-if (-not (Test-Path $OscdImg)) {
-    Write-Host "ERROR: oscdimg.exe not found. Is the Windows ADK installed?"
+$QemuImg = Find-QemuImg
+if (-not $QemuImg) {
+    if (Confirm-Install -Name "QEMU (qemu-img)" -Purpose "convert the Debian cloud image to VHDX") {
+        Install-WithWinget -Id $QemuWingetId -Name "QEMU (qemu-img)" -Override $null | Out-Null
+        $QemuImg = Find-QemuImg
+    }
+}
+
+if (-not $QemuImg) {
+    Write-Host "ERROR: qemu-img.exe not found."
     Write-Host ""
-    Write-Host "Expected path:"
-    Write-Host "  $OscdImg"
-    Write-Host ""
-    Write-Host "Download the ADK from:"
-    Write-Host "  https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install"
-    Write-Host "Only the 'Deployment Tools' feature is required."
+    Write-Host "Install it manually with:"
+    Write-Host "  winget install $QemuWingetId"
+    Write-Host "Then run this script again."
     exit 1
 }
 
@@ -108,20 +219,51 @@ $OscdArgs = @(
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: oscdimg failed with exit code $LASTEXITCODE"
-    Remove-Item -Recurse -Force $WorkDir -ErrorAction SilentlyContinue
-    Remove-Item -Force $SeedIso -ErrorAction SilentlyContinue
+    Remove-ProvisionArtifacts
     exit 1
 }
 
 # Config source files (which contain the password) are no longer needed
 Remove-Item -Recurse -Force $WorkDir
 
-# --- COPY AND RESIZE BASE IMAGE -----------------------------------------------
-Write-Host "Copying base image..."
+# --- DOWNLOAD DEBIAN IMAGE ----------------------------------------------------
+Write-Host "Downloading Debian cloud image..."
+Write-Host "  $ImageUrl"
 
-$VhdPath = Join-Path $VHDRoot "$VMName.vhdx"
-Copy-Item $BaseVHDX $VhdPath
+# The progress bar makes Invoke-WebRequest extremely slow in Windows PowerShell 5.1
+$previousProgress   = $ProgressPreference
+$ProgressPreference = 'SilentlyContinue'
+try {
+    Invoke-WebRequest -Uri $ImageUrl -OutFile $ImageFile -UseBasicParsing -ErrorAction Stop
+} catch {
+    Write-Host "ERROR: download failed: $($_.Exception.Message)"
+    Remove-ProvisionArtifacts
+    exit 1
+} finally {
+    $ProgressPreference = $previousProgress
+}
 
+# --- CONVERT IMAGE TO VHDX ----------------------------------------------------
+Write-Host "Converting image to VHDX at $VhdPath..."
+
+$QemuArgs = @(
+    'convert',
+    '-O', 'vhdx',
+    $ImageFile,
+    $VhdPath
+)
+& $QemuImg @QemuArgs
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: qemu-img failed with exit code $LASTEXITCODE"
+    Remove-ProvisionArtifacts -IncludeVhd
+    exit 1
+}
+
+# The downloaded image is no longer needed
+Remove-Item -Force $ImageFile -ErrorAction SilentlyContinue
+
+# --- RESIZE DISK --------------------------------------------------------------
 $currentSize = [int64](Get-VHD -Path $VhdPath).Size
 $targetSize  = [int64]$DiskGB * $BytesPerGB
 
@@ -201,6 +343,11 @@ if ($hbOk) {
     Write-Host "Warning: no guest heartbeat within $hbTimeout seconds -- leaving seed ISO in place at:"
     Write-Host "  $SeedIso"
     Write-Host "Eject the DVD and delete the ISO manually once the VM has booted."
+}
+
+# --- CLEAN UP TEMP FOLDER IF EMPTY --------------------------------------------
+if ((Test-Path $TempRoot) -and -not (Get-ChildItem -Path $TempRoot -Force -ErrorAction SilentlyContinue)) {
+    Remove-Item -Force $TempRoot -ErrorAction SilentlyContinue
 }
 
 Write-Host ""
