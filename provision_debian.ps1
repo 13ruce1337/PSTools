@@ -15,14 +15,15 @@ param(
 )
 
 # --- CONFIG -------------------------------------------------------------------
-$BaseVHDX  = "$env:USERPROFILE\Images\debian-12-base.vhdx"
-$TempRoot  = "$env:TEMP\vm-provision"
-$WorkDir   = "$TempRoot\$VMName"
-$SeedIso   = "$TempRoot\$VMName-seed.iso"
-$VMRoot    = (Get-VMHost).VirtualMachinePath
-$VHDRoot   = (Get-VMHost).VirtualHardDiskPath
-$Switch    = "Default Switch"
-$OscdImg   = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
+$BytesPerGB = [int64]1024 * 1024 * 1024
+$BaseVHDX   = Join-Path $env:USERPROFILE "Images\debian-12-base.vhdx"
+$TempRoot   = Join-Path $env:TEMP "vm-provision"
+$WorkDir    = Join-Path $TempRoot $VMName
+$SeedIso    = Join-Path $TempRoot "$VMName-seed.iso"
+$VMRoot     = (Get-VMHost).VirtualMachinePath
+$VHDRoot    = (Get-VMHost).VirtualHardDiskPath
+$Switch     = "Default Switch"
+$OscdImg    = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
 # ------------------------------------------------------------------------------
 
 # --- GUARD --------------------------------------------------------------------
@@ -58,12 +59,12 @@ if (-not (Test-Path $WorkDir)) {
 # --- WRITE CLOUD-INIT CONFIGS -------------------------------------------------
 Write-Host "Writing cloud-init configs..."
 
-Set-Content -Path "$WorkDir\meta-data" -Value @"
+Set-Content -Path (Join-Path $WorkDir "meta-data") -Value @"
 instance-id: $VMName
 local-hostname: $VMName
 "@
 
-Set-Content -Path "$WorkDir\user-data" -Value @"
+Set-Content -Path (Join-Path $WorkDir "user-data") -Value @"
 #cloud-config
 
 hostname: $VMName
@@ -88,7 +89,7 @@ runcmd:
   - systemctl restart sshd
 "@
 
-Set-Content -Path "$WorkDir\network-config" -Value @"
+Set-Content -Path (Join-Path $WorkDir "network-config") -Value @"
 version: 2
 ethernets:
   eth0:
@@ -98,7 +99,13 @@ ethernets:
 # --- BUILD SEED ISO -----------------------------------------------------------
 Write-Host "Building seed ISO..."
 
-& $OscdImg -j1 -lcidata $WorkDir $SeedIso
+$OscdArgs = @(
+    '-j1',
+    '-lcidata',
+    $WorkDir,
+    $SeedIso
+)
+& $OscdImg @OscdArgs
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: oscdimg failed with exit code $LASTEXITCODE"
@@ -113,21 +120,22 @@ Remove-Item -Recurse -Force $WorkDir
 # --- COPY AND RESIZE BASE IMAGE -----------------------------------------------
 Write-Host "Copying base image..."
 
-$VhdPath = "$VHDRoot\$VMName.vhdx"
+$VhdPath = Join-Path $VHDRoot "$VMName.vhdx"
 Copy-Item $BaseVHDX $VhdPath
 
-$currentSize = (Get-VHD -Path $VhdPath).Size
-$targetSize  = $DiskGB * 1GB
+$currentSize = [int64](Get-VHD -Path $VhdPath).Size
+$targetSize  = [int64]$DiskGB * $BytesPerGB
 
 if ($targetSize -lt $currentSize) {
-    $safeDiskGB = [math]::Ceiling($currentSize / 1GB)
-    Write-Host "Warning: requested ${DiskGB}GB is smaller than base image ($safeDiskGB GB) -- using $safeDiskGB GB instead"
-    $targetSize = $safeDiskGB * 1GB
+    $safeDiskGB = [int][math]::Ceiling($currentSize / $BytesPerGB)
+    Write-Host "Warning: requested ${DiskGB}GB is smaller than base image (${safeDiskGB}GB) -- using ${safeDiskGB}GB instead"
+    $targetSize = [int64]$safeDiskGB * $BytesPerGB
     $DiskGB     = $safeDiskGB
 }
 
 if ($targetSize -gt $currentSize) {
-    Write-Host "Resizing disk from $([math]::Round($currentSize/1GB, 1))GB to ${DiskGB}GB..."
+    $currentGBRounded = [math]::Round($currentSize / $BytesPerGB, 1)
+    Write-Host "Resizing disk from ${currentGBRounded}GB to ${DiskGB}GB..."
     Resize-VHD -Path $VhdPath -SizeBytes $targetSize
 } else {
     Write-Host "Disk already at ${DiskGB}GB -- skipping resize"
@@ -136,8 +144,10 @@ if ($targetSize -gt $currentSize) {
 # --- CREATE VM ----------------------------------------------------------------
 Write-Host "Creating VM: $VMName..."
 
+$memoryBytes = [int64]$RamGB * $BytesPerGB
+
 New-VM -Name $VMName -Generation 2 `
-    -MemoryStartupBytes ($RamGB * 1GB) `
+    -MemoryStartupBytes $memoryBytes `
     -SwitchName $Switch `
     -Path $VMRoot | Out-Null
 
@@ -194,7 +204,7 @@ if ($hbOk) {
     Write-Host "Eject the DVD and delete the ISO manually once the VM has booted."
 }
 
-$vm = Get-VM -Name $VMName
+$vmInfo = Get-VM -Name $VMName
 
 Write-Host ""
 Write-Host "Done."
@@ -204,4 +214,4 @@ Write-Host "  RAM:      ${RamGB}GB"
 Write-Host "  Disk:     ${DiskGB}GB"
 Write-Host "  Connect:  ssh root@<vm-ip>"
 Write-Host ""
-$vm | Format-Table Name, State, CPUUsage, MemoryAssigned, Uptime, Status, Version
+$vmInfo | Format-Table -AutoSize -Property Name, State, CPUUsage, MemoryAssigned, Uptime, Status, Version
