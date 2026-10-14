@@ -52,7 +52,7 @@ function New-DebianVM {
         Microsoft.HyperV.PowerShell.VirtualMachine
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([Microsoft.HyperV.PowerShell.VirtualMachine])]
+    [OutputType('Microsoft.HyperV.PowerShell.VirtualMachine')]
     param(
         [Parameter(Mandatory, Position = 0)]
         [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9-]{0,62}$')]
