@@ -118,6 +118,9 @@ function New-DebianVM {
     $seedIso = Join-Path $SeedsPath "$Name-seed.iso"
     $vhdPath = Join-Path $vhdRoot "$Name.vhdx"
 
+    # Explicit byte multiplier (avoids relying on the 1GB numeric literal suffix).
+    [int64]$bytesPerGB = 1073741824
+
     # Plain-text password is only needed to write the cloud-init file.
     $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($RootPassword)
     try {
@@ -184,7 +187,8 @@ function New-DebianVM {
         # --- Seed ISO ---------------------------------------------------------
         Write-Verbose "Building seed ISO: $seedIso"
 
-        & $OscdimgPath -j1 -lcidata $workDir $seedIso | Out-Null
+        $oscdimgArgs = @('-j1', '-lcidata', $workDir, $seedIso)
+        & $OscdimgPath @oscdimgArgs | Out-Null
         if ($LASTEXITCODE -ne 0) {
             throw "oscdimg failed with exit code $LASTEXITCODE."
         }
@@ -194,17 +198,18 @@ function New-DebianVM {
         Copy-Item -LiteralPath $BaseVhdxPath -Destination $vhdPath -ErrorAction Stop
 
         $currentSize = (Get-VHD -Path $vhdPath).Size
-        $targetSize  = [int64]$DiskGB * 1GB
+        $targetSize  = [int64]$DiskGB * $bytesPerGB
 
         if ($targetSize -lt $currentSize) {
-            $safeDiskGB = [math]::Ceiling($currentSize / 1GB)
+            $safeDiskGB = [int][math]::Ceiling($currentSize / $bytesPerGB)
             Write-Warning "Requested ${DiskGB}GB is smaller than the base image; using ${safeDiskGB}GB instead."
             $DiskGB     = $safeDiskGB
-            $targetSize = [int64]$DiskGB * 1GB
+            $targetSize = [int64]$DiskGB * $bytesPerGB
         }
 
         if ($targetSize -gt $currentSize) {
-            Write-Verbose ('Resizing disk from {0}GB to {1}GB...' -f [math]::Round($currentSize / 1GB, 1), $DiskGB)
+            $currentSizeGB = [math]::Round($currentSize / $bytesPerGB, 1)
+            Write-Verbose ('Resizing disk from {0}GB to {1}GB...' -f $currentSizeGB, $DiskGB)
             Resize-VHD -Path $vhdPath -SizeBytes $targetSize
         }
         else {
@@ -214,8 +219,10 @@ function New-DebianVM {
         # --- VM ---------------------------------------------------------------
         Write-Verbose "Creating VM: $Name"
 
+        $memoryBytes = [int64]$MemoryGB * $bytesPerGB
+
         $null = New-VM -Name $Name -Generation 2 `
-            -MemoryStartupBytes ([int64]$MemoryGB * 1GB) `
+            -MemoryStartupBytes $memoryBytes `
             -SwitchName $SwitchName `
             -Path $vmRoot
 
