@@ -8,10 +8,16 @@ function New-DebianVM {
         seed ISO with oscdimg (Windows ADK Deployment Tools), creates the VM,
         attaches both, and starts it.
 
+        If the base VHDX does not exist (or -RebuildBaseImage is specified), it
+        is created automatically: qemu-img is located (QEMU is installed via
+        winget if needed), the Debian cloud qcow2 image is downloaded, and it is
+        converted to VHDX at -BaseVhdxPath.
+
         Requirements:
           - Elevated session with the Hyper-V PowerShell module
           - Windows ADK "Deployment Tools" (oscdimg.exe)
-          - A Debian cloud image converted to VHDX (see the Debian VHDX helper)
+          - winget (only if the base image must be built and QEMU is not
+            already installed)
 
     .PARAMETER Name
         VM name. Also used as the guest hostname.
@@ -30,7 +36,14 @@ function New-DebianVM {
         Root password for the guest, as a SecureString.
 
     .PARAMETER BaseVhdxPath
-        Path to the base Debian VHDX.
+        Path to the base Debian VHDX. Created automatically if it does not exist.
+
+    .PARAMETER BaseImageUrl
+        URL of the Debian cloud qcow2 image used to build the base VHDX.
+
+    .PARAMETER RebuildBaseImage
+        Download and convert the base image again, replacing any existing
+        base VHDX.
 
     .PARAMETER SeedsPath
         Folder where the cloud-init seed ISO is stored.
@@ -47,6 +60,9 @@ function New-DebianVM {
 
     .EXAMPLE
         New-DebianVM -Name test01 -RootPassword $pw -WhatIf
+
+    .EXAMPLE
+        New-DebianVM -Name test02 -RootPassword $pw -RebuildBaseImage
 
     .OUTPUTS
         Microsoft.HyperV.PowerShell.VirtualMachine
@@ -74,6 +90,11 @@ function New-DebianVM {
         [string]$BaseVhdxPath = (Join-Path $env:USERPROFILE 'Images\debian-12-base.vhdx'),
 
         [ValidateNotNullOrEmpty()]
+        [string]$BaseImageUrl = 'https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2',
+
+        [switch]$RebuildBaseImage,
+
+        [ValidateNotNullOrEmpty()]
         [string]$SeedsPath = (Join-Path $env:USERPROFILE 'Seeds'),
 
         [ValidateNotNullOrEmpty()]
@@ -82,6 +103,104 @@ function New-DebianVM {
         [ValidateNotNullOrEmpty()]
         [string]$OscdimgPath = 'C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe'
     )
+
+    # --- Inner helpers --------------------------------------------------------
+    # Defined inline so they are not exported as part of the module.
+
+    # Returns the full path to qemu-img.exe, installing QEMU via winget if needed.
+    function Get-QemuImgPath {
+        $found = Get-Command qemu-img.exe -ErrorAction SilentlyContinue
+        if ($found) {
+            return $found.Source
+        }
+
+        Write-Verbose 'qemu-img not found. Installing QEMU via winget...'
+
+        if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
+            throw 'qemu-img is not installed and winget is not available to install it.'
+        }
+
+        & winget.exe install `
+            --id SoftwareFreedomConservancy.QEMU `
+            --accept-source-agreements `
+            --accept-package-agreements `
+            --silent | Out-Host
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "winget exited with code $LASTEXITCODE; checking whether qemu-img is available anyway."
+        }
+
+        # Refresh PATH from machine and user environment.
+        $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                    [System.Environment]::GetEnvironmentVariable('Path', 'User')
+
+        $found = Get-Command qemu-img.exe -ErrorAction SilentlyContinue
+        if ($found) {
+            return $found.Source
+        }
+
+        # Fall back to the default install location.
+        $qemuInstall = Get-ChildItem -LiteralPath $env:ProgramFiles -Directory -Filter 'qemu*' -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+
+        if ($qemuInstall) {
+            $candidate = Join-Path $qemuInstall.FullName 'qemu-img.exe'
+            if (Test-Path -LiteralPath $candidate) {
+                return $candidate
+            }
+        }
+
+        throw 'QEMU was installed but qemu-img.exe could not be located.'
+    }
+
+    # Downloads the Debian cloud qcow2 image and converts it to VHDX.
+    function New-DebianBaseVhdx {
+        param(
+            [Parameter(Mandatory)][string]$Url,
+            [Parameter(Mandatory)][string]$Destination
+        )
+
+        $imageWorkDir = Join-Path $env:TEMP 'PSTools\New-DebianVM\_baseimage'
+        $qcowFile     = Join-Path $imageWorkDir ([System.IO.Path]::GetFileName(([uri]$Url).LocalPath))
+        $tempVhdx     = Join-Path $imageWorkDir 'base-conversion.vhdx'
+        $destDir      = Split-Path -Path $Destination -Parent
+
+        try {
+            foreach ($dir in @($imageWorkDir, $destDir)) {
+                if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+                    $null = New-Item -ItemType Directory -Path $dir -Force
+                }
+            }
+
+            $qemuExe = Get-QemuImgPath
+
+            Write-Verbose "Downloading Debian cloud image from $Url"
+            $oldProgress = $ProgressPreference
+            try {
+                # The progress bar makes Invoke-WebRequest extremely slow in Windows PowerShell 5.1.
+                $ProgressPreference = 'SilentlyContinue'
+                Invoke-WebRequest -Uri $Url -OutFile $qcowFile -UseBasicParsing -ErrorAction Stop
+            }
+            finally {
+                $ProgressPreference = $oldProgress
+            }
+
+            Write-Verbose 'Converting QCOW2 to VHDX...'
+            & $qemuExe convert -p -f qcow2 -O vhdx $qcowFile $tempVhdx | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+                throw "qemu-img conversion failed with exit code $LASTEXITCODE."
+            }
+
+            # Only replace the base image once conversion has fully succeeded.
+            Move-Item -LiteralPath $tempVhdx -Destination $Destination -Force -ErrorAction Stop
+            Write-Verbose "Base image created at $Destination"
+        }
+        finally {
+            if (Test-Path -LiteralPath $imageWorkDir) {
+                Remove-Item -LiteralPath $imageWorkDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
 
     # --- Preflight ------------------------------------------------------------
     if (-not (Test-IsAdmin)) {
@@ -97,17 +216,27 @@ function New-DebianVM {
         return
     }
 
-    if (-not (Test-Path -LiteralPath $BaseVhdxPath)) {
-        throw "Base image not found at '$BaseVhdxPath'. Create it first (see create_debian_vhdx) and place it there."
-    }
-
     if (-not (Test-Path -LiteralPath $OscdimgPath)) {
         throw ("oscdimg.exe not found at '$OscdimgPath'. Install the Windows ADK 'Deployment Tools' feature: " +
                'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install')
     }
 
+    $buildBaseImage = $RebuildBaseImage -or -not (Test-Path -LiteralPath $BaseVhdxPath)
+
     if (-not $PSCmdlet.ShouldProcess($Name, 'Create and start Debian VM')) {
         return
+    }
+
+    # --- Base image -----------------------------------------------------------
+    if ($buildBaseImage) {
+        if ($RebuildBaseImage) {
+            Write-Verbose "Rebuilding base image at '$BaseVhdxPath'."
+        }
+        else {
+            Write-Verbose "Base image not found at '$BaseVhdxPath'; building it."
+        }
+
+        New-DebianBaseVhdx -Url $BaseImageUrl -Destination $BaseVhdxPath
     }
 
     # --- Paths ----------------------------------------------------------------
