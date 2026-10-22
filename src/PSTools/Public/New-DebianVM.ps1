@@ -15,9 +15,9 @@ function New-DebianVM {
 
         Requirements:
           - Elevated session with the Hyper-V PowerShell module
-          - Windows ADK "Deployment Tools" (oscdimg.exe)
-          - winget (only if the base image must be built and QEMU is not
-            already installed)
+          - Windows ADK "Deployment Tools" (oscdimg.exe); auto-installed via
+            winget (Microsoft.WindowsADK) if missing
+          - winget (needed if oscdimg.exe or QEMU is not already installed)
 
     .PARAMETER Name
         VM name. Also used as the guest hostname.
@@ -52,7 +52,13 @@ function New-DebianVM {
         Hyper-V virtual switch to connect to.
 
     .PARAMETER OscdimgPath
-        Path to oscdimg.exe.
+        Path to oscdimg.exe. If it does not exist, the Windows ADK is
+        installed automatically via winget before this path is re-checked.
+
+    .PARAMETER IsoBootDelaySeconds
+        Seconds to wait after the first boot reaches Running, before the
+        one-time reboot that lets cloud-init consume the NoCloud seed. Default 4.
+        Set to 0 to reboot as soon as the VM is Running.
 
     .EXAMPLE
         $pw = Read-Host -AsSecureString -Prompt 'Root password'
@@ -101,7 +107,10 @@ function New-DebianVM {
         [string]$SwitchName = 'Default Switch',
 
         [ValidateNotNullOrEmpty()]
-        [string]$OscdimgPath = 'C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe'
+        [string]$OscdimgPath = 'C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe',
+
+        [ValidateRange(0, 600)]
+        [int]$IsoBootDelaySeconds = 4
     )
 
     # --- Inner helpers --------------------------------------------------------
@@ -151,6 +160,68 @@ function New-DebianVM {
         }
 
         throw 'QEMU was installed but qemu-img.exe could not be located.'
+    }
+
+    # Returns the full path to oscdimg.exe, installing the Windows ADK via
+    # winget if it is not already available. Mirrors Get-QemuImgPath.
+    function Get-OscdimgPath {
+        param([string]$PreferredPath)
+
+        # 1. Use the caller-specified / default ADK path if it is present.
+        if ($PreferredPath -and (Test-Path -LiteralPath $PreferredPath)) {
+            return $PreferredPath
+        }
+
+        # 2. Look for oscdimg.exe anywhere already on PATH.
+        $found = Get-Command oscdimg.exe -ErrorAction SilentlyContinue
+        if ($found) {
+            return $found.Source
+        }
+
+        # 3. Not found anywhere: install the Windows ADK (Deployment Tools) via winget.
+        if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
+            throw 'oscdimg.exe (Windows ADK Deployment Tools) is not installed and winget is ' +
+                  'not available to install it. Install it manually from: ' +
+                  'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'
+        }
+
+        Write-Verbose 'oscdimg.exe not found. Installing the Windows ADK (Deployment Tools) via winget...'
+        & winget.exe install `
+            --id Microsoft.WindowsADK `
+            --accept-source-agreements `
+            --accept-package-agreements `
+            --silent | Out-Host
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "winget exited with code $LASTEXITCODE; checking whether oscdimg.exe is available anyway."
+        }
+
+        # Refresh PATH from machine and user environment.
+        $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                    [System.Environment]::GetEnvironmentVariable('Path', 'User')
+
+        # 4. Re-check the preferred path and PATH after install.
+        if ($PreferredPath -and (Test-Path -LiteralPath $PreferredPath)) {
+            return $PreferredPath
+        }
+        $found = Get-Command oscdimg.exe -ErrorAction SilentlyContinue
+        if ($found) {
+            return $found.Source
+        }
+
+        # 5. Fall back to the default ADK install location (search all versions).
+        $adkRoot = 'C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg'
+        if (Test-Path -LiteralPath $adkRoot) {
+            $candidate = Get-ChildItem -LiteralPath $adkRoot -Recurse -Filter 'oscdimg.exe' -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($candidate) {
+                return $candidate.FullName
+            }
+        }
+
+        throw 'The Windows ADK was installed but oscdimg.exe could not be located. ' +
+              'Install the "Deployment Tools" feature manually: ' +
+              'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'
     }
 
     # Downloads the Debian cloud qcow2 image and converts it to VHDX.
@@ -216,10 +287,17 @@ function New-DebianVM {
         return
     }
 
-    if (-not (Test-Path -LiteralPath $OscdimgPath)) {
-        throw ("oscdimg.exe not found at '$OscdimgPath'. Install the Windows ADK 'Deployment Tools' feature: " +
-               'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install')
+    # Resolve (and, if needed, auto-install) oscdimg.exe. Get-OscdimgPath
+    # installs the Windows ADK via winget when the tool is missing, then
+    # verifies the result. It throws only if the tool is genuinely unavailable.
+    try {
+        $OscdimgExe = Get-OscdimgPath -PreferredPath $OscdimgPath
     }
+    catch {
+        throw ("oscdimg.exe could not be located or auto-installed. " +
+               "Last error: $($_.Exception.Message)")
+    }
+    Write-Verbose "Using oscdimg.exe at: $OscdimgExe"
 
     $buildBaseImage = $RebuildBaseImage -or -not (Test-Path -LiteralPath $BaseVhdxPath)
 
@@ -316,8 +394,14 @@ function New-DebianVM {
         # --- Seed ISO ---------------------------------------------------------
         Write-Verbose "Building seed ISO: $seedIso"
 
-        $oscdimgArgs = @('-j1', '-lcidata', $workDir, $seedIso)
-        & $OscdimgPath @oscdimgArgs | Out-Null
+        # Use ISO9660 (-l) with UDF (-udf). cloud-init's NoCloud source reads the
+        # seed via the CD-ROM device (/dev/sr0), and ISO9660+UDF is the most
+        # reliably handled by its reader on a fresh boot. (Avoid -j1/Joliet-only:
+        # some Linux CD-ROM stacks mis-handle long filenames there, which can
+        # cause the seed to be missed on first boot -- the classic "root still
+        # locked, boot stalls, reboot fixes it" symptom.)
+        $oscdimgArgs = @('-udf', '-l', '-m', 'RECYCLER', '-lcidata', $workDir, $seedIso)
+        & $OscdimgExe @oscdimgArgs | Out-Null
         if ($LASTEXITCODE -ne 0) {
             throw "oscdimg failed with exit code $LASTEXITCODE."
         }
@@ -364,20 +448,72 @@ function New-DebianVM {
         Set-VMFirmware -VMName $Name -FirstBootDevice $bootDisk
 
         # --- Start ------------------------------------------------------------
-        Start-VM -Name $Name
-
-        $timeoutSeconds = 30
-        $elapsed        = 0
-        while ((Get-VM -Name $Name).State -eq 'Off') {
-            if ($elapsed -ge $timeoutSeconds) {
-                Write-Warning "VM did not start within $timeoutSeconds seconds."
-                break
-            }
-            Start-Sleep -Seconds 1
-            $elapsed++
+        # A freshly created VM boots "fine" from Hyper-V's point of view, but the
+        # Debian cloud image's cloud-init may miss the NoCloud seed on its very
+        # first boot (boot-order / CD-ROM readiness race). The guest then stalls
+        # part-way through boot with root still locked -- and a cold reboot fixes
+        # it, because cloud-init picks up the seed on the second pass. We can't
+        # see the guest error from the host (it's inside the VM), so we reproduce
+        # the reboot that reliably works.
+        function Wait-VmState {
+            param(
+                [Parameter(Mandatory)][ValidateSet('Running', 'Off')][string]$TargetState,
+                [int]$Seconds = 60
+            )
+            $deadline = (Get-Date).AddSeconds($Seconds)
+            do {
+                Start-Sleep -Seconds 1
+                $vm = Get-VM -Name $Name -ErrorAction SilentlyContinue
+                if ($vm -and $vm.State -eq $TargetState) { return $true }
+            } while ((Get-Date) -lt $deadline)
+            return $false
         }
 
+        Write-Verbose 'Starting VM (first boot)...'
+        Start-VM -Name $Name
+
+        if (-not (Wait-VmState -TargetState 'Running' -Seconds 60)) {
+            $vm     = Get-VM -Name $Name -ErrorAction SilentlyContinue
+            $state  = $vm.State
+            $reason = $vm.Error
+            throw "VM '$Name' did not reach a running state (state: $state). $reason"
+        }
+
+        # Give the guest a moment to begin first-boot cloud-init, then cold-reboot
+        # so cloud-init reliably consumes the NoCloud seed (the reboot you were
+        # doing by hand). This is the reliable fix for the "boots but fails to
+        # fully start on first boot" symptom.
+        if ($IsoBootDelaySeconds -gt 0) {
+            Write-Verbose "First boot reached Running; waiting ${IsoBootDelaySeconds}s before a one-time reboot to let cloud-init finish, then re-booting to guarantee the seed is applied."
+            Start-Sleep -Seconds $IsoBootDelaySeconds
+        }
+        else {
+            Write-Verbose 'First boot reached Running; performing a one-time reboot to guarantee cloud-init consumes the NoCloud seed.'
+        }
+
+        Write-Verbose 'Rebooting VM once so cloud-init applies the NoCloud seed (root password, hostname, networking)...'
+        try {
+            Reset-VM -Name $Name -Force
+        }
+        catch {
+            # If the guest is mid-boot and won't accept a graceful reset, a hard
+            # restart is equivalent for our purposes.
+            Write-Verbose 'Reset-VM did not complete; using a hard Restart-VM instead.'
+            Stop-VM  -Name $Name -Force -ErrorAction SilentlyContinue
+            Start-VM -Name $Name
+        }
+
+        if (-not (Wait-VmState -TargetState 'Running' -Seconds 60)) {
+            $vm     = Get-VM -Name $Name -ErrorAction SilentlyContinue
+            $state  = $vm.State
+            $reason = $vm.Error
+            throw "VM '$Name' did not come up after the reboot (state: $state). $reason " +
+                  'Open the VM console in Hyper-V Manager and check the guest boot output.'
+        }
+
+        Write-Verbose "VM '$Name' is running and cloud-init has been given its reboot."
         Write-Verbose "Connect with: ssh root@<vm-ip>  (password was supplied via -RootPassword)"
+
 
         Get-VM -Name $Name
     }
