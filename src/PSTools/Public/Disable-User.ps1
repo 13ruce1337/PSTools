@@ -1,7 +1,7 @@
-function Deprovision-User {
+function Disable-User {
     <#
     .SYNOPSIS
-        Deprovisions User
+        Disables/Deprovisions User
 
     .DESCRIPTION
         IMPORTANT: You must have RSAT installed and you must run this from an elevated terminal
