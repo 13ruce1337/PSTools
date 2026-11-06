@@ -3,7 +3,7 @@
     RootModule            = 'PSTools.psm1'
 
     # Version number of this module (single source of truth for versioning).
-    ModuleVersion         = '2.0.0'
+    ModuleVersion         = '2.1.0'
 
     # Unique ID for this module.
     GUID                  = 'b7c1f6a2-3d54-4e8f-9a1b-6c2e0d7f4a93'
@@ -11,7 +11,7 @@
     Author                = 'Trevor Cooper'
     CompanyName           = 'Community'
     Copyright             = '(c) Trevor Cooper. All rights reserved.'
-    Description           = 'PowerShell IT toolkit: Hyper-V provisioning, driver staging, user deprovisioning and more.'
+    Description           = 'PowerShell IT toolkit: Hyper-V provisioning, Office deployment, driver staging, user deprovisioning and more.'
 
     # Windows PowerShell 5.1 and PowerShell 7+ (Hyper-V cmdlets are Windows-only).
     PowerShellVersion     = '5.1'
@@ -25,7 +25,13 @@
     # Export explicitly (faster command discovery than wildcards).
     # Keep this list in sync with the files in Public/.
     FunctionsToExport     = @(
+        'Disable-User'
+        'Get-MerakiFirmware'
+        'Install-OfficeProduct'
         'New-DebianVM'
+        'New-WindowsVM'
+        'Repair-OfficeProduct'
+        'Uninstall-OfficeProduct'
     )
     CmdletsToExport       = @()
     VariablesToExport     = @()
@@ -33,7 +39,7 @@
 
     PrivateData           = @{
         PSData = @{
-            Tags       = @('IT', 'Admin', 'HyperV', 'Debian', 'Automation')
+            Tags       = @('IT', 'Admin', 'HyperV', 'Debian', 'Office', 'Automation')
             ProjectUri = 'https://github.com/13ruce1337/PSTools'
             # LicenseUri = 'https://github.com/13ruce1337/PSTools/blob/main/LICENSE'
         }
