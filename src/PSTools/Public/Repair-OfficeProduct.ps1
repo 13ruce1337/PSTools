@@ -160,7 +160,12 @@ function Repair-OfficeProduct {
         )
 
         Write-Verbose "Running $c2rClient $($repairArgs -join ' ')"
-        $proc = Start-Process -FilePath $c2rClient -ArgumentList $repairArgs -Wait -PassThru -WindowStyle Hidden
+        $proc = Start-Process -FilePath $c2rClient -ArgumentList $repairArgs -PassThru -WindowStyle Hidden
+
+        # Don't use Start-Process -Wait: it also waits for every Click-to-Run
+        # process the repair starts, and some keep running, so it never returns.
+        $null = $proc.Handle      # keeps ExitCode available in Windows PowerShell 5.1
+        $proc.WaitForExit()       # waits for this process only, not its child processes
 
         if ($proc.ExitCode -ne 0) {
             throw "Click-to-Run $RepairType exited with code $($proc.ExitCode)."

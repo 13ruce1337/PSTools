@@ -7,6 +7,10 @@ function Invoke-OdtSetup {
         Writes the configuration to a uniquely named temp file next to
         setup.exe, runs it, removes the file and returns the exit code.
         Throws when setup.exe exits non-zero.
+
+        Waits only for setup.exe itself. Start-Process -Wait would also wait
+        for every process setup.exe starts, and some Click-to-Run processes
+        keep running after the install finishes, so -Wait never returns.
     #>
     [CmdletBinding()]
     [OutputType([int])]
@@ -45,7 +49,10 @@ function Invoke-OdtSetup {
 
         $proc = Start-Process -FilePath $SetupPath `
             -ArgumentList '/configure', "`"$configPath`"" `
-            -Wait -PassThru -WindowStyle Hidden
+            -PassThru -WindowStyle Hidden
+
+        $null = $proc.Handle      # keeps ExitCode available in Windows PowerShell 5.1
+        $proc.WaitForExit()       # waits for setup.exe only, not its child processes
 
         if ($proc.ExitCode -ne 0) {
             $hint = if ($LogPath) { " See the ODT logs in '$LogPath'." } else { '' }
