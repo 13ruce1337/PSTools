@@ -1,5 +1,4 @@
-function Get-M365Room
-{
+function Get-M365Room {
     <#
     .SYNOPSIS
         Searches for Microsoft 365 room mailboxes.
@@ -39,35 +38,40 @@ function Get-M365Room
         [string]$UserPrincipalName
     )
 
-    begin
-    {
+    begin {
         Assert-ExchangeOnlineConnection -UserPrincipalName $UserPrincipalName
+
+        $properties = @('Name', 'DisplayName', 'PrimarySmtpAddress')
     }
 
-    process
-    {
-        if ($RoomList)
-        {
-            foreach ($list in $RoomList)
-            {
-                try
-                {
-                    Get-DistributionGroupMember -Identity $list -ResultSize Unlimited -ErrorAction Stop |
-                        Where-Object { $_.Name -like $Name -or $_.DisplayName -like $Name } |
-                        Select-Object -Property @{ Name = 'RoomList'; Expression = { $list } },
-                            Name, DisplayName, PrimarySmtpAddress
-                }
-                catch
-                {
-                    Write-Error "Unable to list members of room list '$list': $_"
+    process {
+        # No room list given: search every room mailbox in the tenant.
+        if (-not $RoomList) {
+            $rooms = Get-EXOMailbox -RecipientTypeDetails RoomMailbox -ResultSize Unlimited
+            $rooms | Where-Object { ($_.Name -like $Name) -or ($_.DisplayName -like $Name) } | Select-Object -Property $properties
+            return
+        }
+
+        # Room list(s) given: return the rooms that belong to each one.
+        foreach ($list in $RoomList) {
+            try {
+                $members = Get-DistributionGroupMember -Identity $list -ResultSize Unlimited -ErrorAction Stop
+            }
+            catch {
+                Write-Error "Unable to list members of room list '$list': $_"
+                continue
+            }
+
+            $matching = $members | Where-Object { ($_.Name -like $Name) -or ($_.DisplayName -like $Name) }
+
+            foreach ($room in $matching) {
+                [pscustomobject]@{
+                    RoomList           = $list
+                    Name               = $room.Name
+                    DisplayName        = $room.DisplayName
+                    PrimarySmtpAddress = $room.PrimarySmtpAddress
                 }
             }
-        }
-        else
-        {
-            Get-EXOMailbox -RecipientTypeDetails RoomMailbox -ResultSize Unlimited |
-                Where-Object { $_.Name -like $Name -or $_.DisplayName -like $Name } |
-                Select-Object -Property Name, DisplayName, PrimarySmtpAddress
         }
     }
 }

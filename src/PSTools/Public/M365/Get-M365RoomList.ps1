@@ -1,5 +1,4 @@
-function Get-M365RoomList
-{
+function Get-M365RoomList {
     <#
     .SYNOPSIS
         Lists Microsoft 365 room lists (locations/buildings).
@@ -30,7 +29,8 @@ function Get-M365RoomList
 
     Assert-ExchangeOnlineConnection -UserPrincipalName $UserPrincipalName
 
-    Get-DistributionGroup -RecipientTypeDetails RoomList -ResultSize Unlimited |
-        Where-Object { $_.Name -like $Name -or $_.DisplayName -like $Name } |
-        Select-Object -Property Name, DisplayName, PrimarySmtpAddress
+    $properties = @('Name', 'DisplayName', 'PrimarySmtpAddress')
+
+    $roomLists = Get-DistributionGroup -RecipientTypeDetails RoomList -ResultSize Unlimited
+    $roomLists | Where-Object { ($_.Name -like $Name) -or ($_.DisplayName -like $Name) } | Select-Object -Property $properties
 }
