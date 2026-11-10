@@ -33,13 +33,14 @@ function Disable-M365User {
         Display names of groups to never remove the user from.
 
     .NOTES
-        Version:        2.1
+        Version:        2.2
         Author:         Trevor Cooper
         Creation Date:  10/17/24
         Mod 5/7/25:  Updated QOL, comments, function for connecting, module check/install
         Mod 5/14/25: Added function for main components, added ability to take a CSV
         Mod 2.0:     Split from Disable-User into M365-only function, replaced AzureAD with Graph
         Mod 2.1:     Use Assert-ExchangeOnlineConnection for the Exchange Online session
+        Mod 2.2:     Use Invoke-MgGraphRequest for user/group lookups (SDK-version independent, paged, UPN-encoded)
 
     .EXAMPLE
         Disable-M365User -UserPrincipalName trevor.cooper@contoso.com -ManagerUserPrincipalName tuan.pham@contoso.com -Date "10/10/24"
@@ -77,8 +78,11 @@ function Disable-M365User {
     }
 
     process {
-        $mgUser    = Get-MgUser -UserId $UserPrincipalName -Property Id, DisplayName, UserPrincipalName -ErrorAction Stop
-        $mgManager = Get-MgUser -UserId $ManagerUserPrincipalName -Property Id, DisplayName, Mail, UserPrincipalName -ErrorAction Stop
+        $userUri    = "v1.0/users/$([uri]::EscapeDataString($UserPrincipalName))?`$select=id,displayName,userPrincipalName"
+        $managerUri = "v1.0/users/$([uri]::EscapeDataString($ManagerUserPrincipalName))?`$select=id,displayName,mail,userPrincipalName"
+
+        $mgUser    = Invoke-MgGraphRequest -Method GET -Uri $userUri -OutputType PSObject -ErrorAction Stop
+        $mgManager = Invoke-MgGraphRequest -Method GET -Uri $managerUri -OutputType PSObject -ErrorAction Stop
         $managerEmail = if ($mgManager.Mail) { $mgManager.Mail } else { $mgManager.UserPrincipalName }
         $upn = $mgUser.UserPrincipalName
 
@@ -135,7 +139,19 @@ function Disable-M365User {
 
         # Remove from cloud-managed groups (M365 groups, cloud security groups)
         Write-Host "  Removing from Entra/M365 groups"
-        $groups = Get-MgUserMemberOfAsGroup -UserId $mgUser.Id -All -Property Id, DisplayName, GroupTypes, MailEnabled, SecurityEnabled, OnPremisesSyncEnabled
+        $groups = [System.Collections.Generic.List[object]]::new()
+        $memberOfUri = "v1.0/users/$($mgUser.Id)/memberOf?`$select=id,displayName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled"
+        while ($memberOfUri) {
+            $page = Invoke-MgGraphRequest -Method GET -Uri $memberOfUri -OutputType PSObject -ErrorAction Stop
+            foreach ($entry in @($page.value)) {
+                # memberOf can also return directory roles / administrative units; keep groups only
+                if ($entry.'@odata.type' -eq '#microsoft.graph.group') {
+                    $groups.Add($entry)
+                }
+            }
+            $memberOfUri = $page.'@odata.nextLink'
+        }
+
         foreach ($group in $groups) {
             if ($ExcludeGroup -contains $group.DisplayName) {
                 Write-Host "    Skipping $($group.DisplayName) (excluded)"
