@@ -86,6 +86,9 @@ function Get-M365MailboxSpaceReport {
     begin {
         Assert-ExchangeOnlineConnection -UserPrincipalName $UserPrincipalName
 
+        # Explicit byte multiplier (avoids relying on the 1MB numeric literal suffix).
+        [int64]$bytesPerMB = 1048576
+
         # Parses "1.23 MB (1,234,567 bytes)" (ByteQuantifiedSize or its string form) into bytes.
         function ConvertTo-ByteCount {
             param($Value)
@@ -106,12 +109,62 @@ function Get-M365MailboxSpaceReport {
             $null = New-Item -ItemType Directory -Path $OutputPath -Force
         }
 
-        $minimumBytes = [int64]($MinimumSizeMB * 1MB)
+        $minimumBytes = [int64]($MinimumSizeMB * $bytesPerMB)
+
+        # Property lists (kept as explicit arrays rather than inline comma lists).
+        $mailboxProperties = @(
+            'IssueWarningQuota'
+            'ProhibitSendQuota'
+            'ProhibitSendReceiveQuota'
+        )
+
+        $folderSizeMBProperty = @{
+            Name       = 'SizeMB'
+            Expression = { [math]::Round((ConvertTo-ByteCount $_.FolderSize) / $bytesPerMB, 2) }
+        }
+
+        $folderProperties = @(
+            'Name'
+            'FolderPath'
+            'FolderType'
+            'ItemsInFolder'
+            'FolderSize'
+            $folderSizeMBProperty
+        )
+
+        $folderTableSizeColumn = @{
+            Label      = 'Size(MB)'
+            Expression = { $_.SizeMB }
+        }
+
+        $folderTableProperties = @(
+            'Name'
+            'FolderPath'
+            'ItemsInFolder'
+            'FolderSize'
+            $folderTableSizeColumn
+        )
+
+        $sentItemsProperties = @(
+            'Name'
+            'FolderPath'
+            'ItemsInFolder'
+            'FolderSize'
+            'FolderAndSubfolderSize'
+        )
+
+        $largeSentTableProperties = @(
+            'Received'
+            'SizeMB'
+            'RecipientCount'
+            'Subject'
+            'Recipients'
+        )
     }
 
     process {
         try {
-            $mailbox = Get-EXOMailbox -Identity $Identity -Properties IssueWarningQuota, ProhibitSendQuota, ProhibitSendReceiveQuota -ErrorAction Stop
+            $mailbox = Get-EXOMailbox -Identity $Identity -Properties $mailboxProperties -ErrorAction Stop
         }
         catch {
             Write-Error "Unable to find mailbox '$Identity': $($_.Exception.Message)"
@@ -147,18 +200,16 @@ function Get-M365MailboxSpaceReport {
         #----------------------------------------------------------[2. Folders by size]----------------------------------------------------------
 
         Write-Host "`n--- All Folders Sorted by Size (Largest First) ---" -ForegroundColor Yellow
-        $folderStats = @(Get-EXOMailboxFolderStatistics -Identity $address -ErrorAction Stop |
-            Select-Object Name, FolderPath, FolderType, ItemsInFolder, FolderSize,
-                @{ Name = 'SizeMB'; Expression = { [math]::Round((ConvertTo-ByteCount $_.FolderSize) / 1MB, 2) } } |
-            Sort-Object -Property SizeMB -Descending)
+        $rawFolders  = Get-EXOMailboxFolderStatistics -Identity $address -ErrorAction Stop
+        $folderStats = @($rawFolders | Select-Object -Property $folderProperties | Sort-Object -Property SizeMB -Descending)
 
-        $folderStats | Format-Table Name, FolderPath, ItemsInFolder, FolderSize, @{ Label = 'Size(MB)'; Expression = { $_.SizeMB } } -AutoSize | Out-Host
+        $folderStats | Format-Table -Property $folderTableProperties -AutoSize | Out-Host
 
         #----------------------------------------------------------[3. Sent Items]----------------------------------------------------------
 
         Write-Host "`n--- Sent Items Folder Detail ---" -ForegroundColor Yellow
-        $sentItems = @(Get-EXOMailboxFolderStatistics -Identity $address -FolderScope SentItems -ErrorAction Stop |
-            Select-Object Name, FolderPath, ItemsInFolder, FolderSize, FolderAndSubfolderSize)
+        $rawSentItems = Get-EXOMailboxFolderStatistics -Identity $address -FolderScope SentItems -ErrorAction Stop
+        $sentItems    = @($rawSentItems | Select-Object -Property $sentItemsProperties)
 
         $sentItems | Format-Table -AutoSize | Out-Host
 
@@ -203,7 +254,7 @@ function Get-M365MailboxSpaceReport {
                     [pscustomobject]@{
                         Received       = $first.Received
                         Subject        = $first.Subject
-                        SizeMB         = [math]::Round($first.Size / 1MB, 2)
+                        SizeMB         = [math]::Round($first.Size / $bytesPerMB, 2)
                         RecipientCount = $recipients.Count
                         Recipients     = $recipients -join '; '
                         MessageId      = $first.MessageId
@@ -212,7 +263,7 @@ function Get-M365MailboxSpaceReport {
                 Sort-Object -Property SizeMB -Descending)
 
             if ($largeSent.Count -gt 0) {
-                $largeSent | Format-Table Received, SizeMB, RecipientCount, Subject, Recipients -AutoSize | Out-Host
+                $largeSent | Format-Table -Property $largeSentTableProperties -AutoSize | Out-Host
             }
             else {
                 Write-Host "No individual messages over $($MinimumSizeMB)MB found in the last $Days days via MessageTraceV2." -ForegroundColor Gray
