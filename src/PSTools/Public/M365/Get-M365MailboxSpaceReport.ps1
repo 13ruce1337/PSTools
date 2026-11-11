@@ -5,10 +5,12 @@ function Get-M365MailboxSpaceReport {
 
     .DESCRIPTION
         Produces a mailbox space report containing:
-            1. Mailbox overview (size, item counts, deleted items, quotas)
+            1. Mailbox overview (size, item counts, deleted items, last logon, quotas)
             2. All folders sorted by size (largest first)
-            3. Sent Items folder detail
-            4. Large sent messages over the last -Days days, via Get-MessageTraceV2
+            3. Recoverable Items folders (a common hidden space hog)
+            4. Archive mailbox statistics (if an archive is enabled)
+            5. Sent Items folder detail
+            6. Large sent messages over the last -Days days, via Get-MessageTraceV2
                (queried in chunks of -ChunkDays, since MessageTraceV2 allows at
                most 10 days per query and 90 days of history)
 
@@ -116,6 +118,16 @@ function Get-M365MailboxSpaceReport {
             'IssueWarningQuota'
             'ProhibitSendQuota'
             'ProhibitSendReceiveQuota'
+            'RecoverableItemsQuota'
+            'RecoverableItemsWarningQuota'
+            'ArchiveGuid'
+            'ArchiveStatus'
+            'ArchiveQuota'
+        )
+
+        # LastLogonTime is not returned by Get-EXOMailboxStatistics unless requested.
+        $statsProperties = @(
+            'LastLogonTime'
         )
 
         $folderSizeMBProperty = @{
@@ -143,6 +155,19 @@ function Get-M365MailboxSpaceReport {
             'ItemsInFolder'
             'FolderSize'
             $folderTableSizeColumn
+        )
+
+        $recoverableSizeMBProperty = @{
+            Name       = 'SizeMB'
+            Expression = { [math]::Round((ConvertTo-ByteCount $_.FolderAndSubfolderSize) / $bytesPerMB, 2) }
+        }
+
+        $recoverableProperties = @(
+            'Name'
+            'FolderPath'
+            'ItemsInFolderAndSubfolders'
+            'FolderAndSubfolderSize'
+            $recoverableSizeMBProperty
         )
 
         $sentItemsProperties = @(
@@ -182,30 +207,76 @@ function Get-M365MailboxSpaceReport {
         #----------------------------------------------------------[1. Overview]----------------------------------------------------------
 
         Write-Host "`n--- Mailbox Overview ---" -ForegroundColor Yellow
-        $stats = Get-EXOMailboxStatistics -Identity $address -ErrorAction Stop
+        $stats = Get-EXOMailboxStatistics -Identity $address -Properties $statsProperties -ErrorAction Stop
 
         $overview = [pscustomobject]@{
-            DisplayName              = $stats.DisplayName
-            PrimarySmtpAddress       = $address
-            TotalItemSize            = $stats.TotalItemSize
-            ItemCount                = $stats.ItemCount
-            TotalDeletedItemSize     = $stats.TotalDeletedItemSize
-            DeletedItemCount         = $stats.DeletedItemCount
-            IssueWarningQuota        = $mailbox.IssueWarningQuota
-            ProhibitSendQuota        = $mailbox.ProhibitSendQuota
-            ProhibitSendReceiveQuota = $mailbox.ProhibitSendReceiveQuota
+            DisplayName                  = $stats.DisplayName
+            PrimarySmtpAddress           = $address
+            LastLogonTime                = $stats.LastLogonTime
+            TotalItemSize                = $stats.TotalItemSize
+            ItemCount                    = $stats.ItemCount
+            TotalDeletedItemSize         = $stats.TotalDeletedItemSize
+            DeletedItemCount             = $stats.DeletedItemCount
+            IssueWarningQuota            = $mailbox.IssueWarningQuota
+            ProhibitSendQuota            = $mailbox.ProhibitSendQuota
+            ProhibitSendReceiveQuota     = $mailbox.ProhibitSendReceiveQuota
+            RecoverableItemsWarningQuota = $mailbox.RecoverableItemsWarningQuota
+            RecoverableItemsQuota        = $mailbox.RecoverableItemsQuota
         }
         $overview | Format-List | Out-Host
 
         #----------------------------------------------------------[2. Folders by size]----------------------------------------------------------
 
         Write-Host "`n--- All Folders Sorted by Size (Largest First) ---" -ForegroundColor Yellow
-        $rawFolders  = Get-EXOMailboxFolderStatistics -Identity $address -ErrorAction Stop
+        $rawFolders  = Get-EXOMailboxFolderStatistics -Identity $address -FolderScope All -ErrorAction Stop
         $folderStats = @($rawFolders | Select-Object -Property $folderProperties | Sort-Object -Property SizeMB -Descending)
 
         $folderStats | Format-Table -Property $folderTableProperties -AutoSize | Out-Host
 
-        #----------------------------------------------------------[3. Sent Items]----------------------------------------------------------
+        #----------------------------------------------------------[3. Recoverable Items]----------------------------------------------------------
+
+        Write-Host "`n--- Recoverable Items Folders ---" -ForegroundColor Yellow
+        $recoverableItems = @()
+        try {
+            $rawRecoverable   = Get-EXOMailboxFolderStatistics -Identity $address -FolderScope RecoverableItems -ErrorAction Stop
+            $recoverableItems = @($rawRecoverable | Select-Object -Property $recoverableProperties | Sort-Object -Property SizeMB -Descending)
+            $recoverableItems | Format-Table -AutoSize | Out-Host
+        }
+        catch {
+            Write-Warning "Unable to read Recoverable Items folders: $($_.Exception.Message)"
+        }
+
+        #----------------------------------------------------------[4. Archive mailbox]----------------------------------------------------------
+
+        Write-Host "`n--- Archive Mailbox ---" -ForegroundColor Yellow
+        $archive = $null
+
+        # ArchiveStatus is unreliable (often 'None' for active archives); ArchiveGuid is the dependable check.
+        $hasArchive = $mailbox.ArchiveGuid -and ([guid]$mailbox.ArchiveGuid -ne [guid]::Empty)
+
+        if ($hasArchive) {
+            try {
+                $archiveStats = Get-EXOMailboxStatistics -Identity $address -Archive -ErrorAction Stop
+                $archive = [pscustomobject]@{
+                    DisplayName          = $archiveStats.DisplayName
+                    TotalItemSize        = $archiveStats.TotalItemSize
+                    ItemCount            = $archiveStats.ItemCount
+                    TotalDeletedItemSize = $archiveStats.TotalDeletedItemSize
+                    DeletedItemCount     = $archiveStats.DeletedItemCount
+                    ArchiveStatus        = $mailbox.ArchiveStatus
+                    ArchiveQuota         = $mailbox.ArchiveQuota
+                }
+                $archive | Format-List | Out-Host
+            }
+            catch {
+                Write-Warning "Archive appears to be enabled but statistics could not be retrieved: $($_.Exception.Message)"
+            }
+        }
+        else {
+            Write-Host "No archive mailbox enabled." -ForegroundColor Gray
+        }
+
+        #----------------------------------------------------------[5. Sent Items]----------------------------------------------------------
 
         Write-Host "`n--- Sent Items Folder Detail ---" -ForegroundColor Yellow
         $rawSentItems = Get-EXOMailboxFolderStatistics -Identity $address -FolderScope SentItems -ErrorAction Stop
@@ -213,7 +284,7 @@ function Get-M365MailboxSpaceReport {
 
         $sentItems | Format-Table -AutoSize | Out-Host
 
-        #----------------------------------------------------------[4. Large sent messages]----------------------------------------------------------
+        #----------------------------------------------------------[6. Large sent messages]----------------------------------------------------------
 
         $largeSent = @()
 
@@ -270,7 +341,7 @@ function Get-M365MailboxSpaceReport {
             }
         }
 
-        #----------------------------------------------------------[5. Export]----------------------------------------------------------
+        #----------------------------------------------------------[7. Export]----------------------------------------------------------
 
         $folderExportPath    = $null
         $largeSentExportPath = $null
@@ -296,6 +367,8 @@ function Get-M365MailboxSpaceReport {
                 Mailbox             = $address
                 Overview            = $overview
                 Folders             = $folderStats
+                RecoverableItems    = $recoverableItems
+                Archive             = $archive
                 SentItems           = $sentItems
                 LargeSentMessages   = $largeSent
                 FolderExportPath    = $folderExportPath
