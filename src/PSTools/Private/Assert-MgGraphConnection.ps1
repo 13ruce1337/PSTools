@@ -10,6 +10,11 @@ function Assert-MgGraphConnection
         scope). App-only sessions are reused as-is. Otherwise Connect-MgGraph is
         called with the requested scopes.
 
+        If the connection fails because an incompatible Microsoft.Identity.Client
+        (MSAL) assembly was already loaded by another module (typically
+        ExchangeOnlineManagement), a descriptive error explaining how to resolve
+        it is thrown instead of the raw "Method not found" message.
+
     .PARAMETER Scopes
         Delegated permission scopes that the session must have.
     #>
@@ -54,5 +59,50 @@ function Assert-MgGraphConnection
     }
 
     Write-Verbose 'Connecting to Microsoft Graph.'
-    Connect-MgGraph -Scopes $Scopes -NoWelcome -ErrorAction Stop
+    try
+    {
+        Connect-MgGraph -Scopes $Scopes -NoWelcome -ErrorAction Stop
+    }
+    catch
+    {
+        $message = [string]$_.Exception.Message
+
+        $isMsalConflict = ($message -match 'Method not found') -and
+            ($message -match 'Microsoft\.Identity') 
+
+        if (-not $isMsalConflict)
+        {
+            throw
+        }
+
+        $graphModule = Get-Module -Name Microsoft.Graph.Authentication | Select-Object -First 1
+        $exoModule   = Get-Module -Name ExchangeOnlineManagement | Select-Object -First 1
+
+        $msalVersions = @([AppDomain]::CurrentDomain.GetAssemblies() |
+            Where-Object { $_.GetName().Name -eq 'Microsoft.Identity.Client' } |
+            ForEach-Object { [string]$_.GetName().Version } |
+            Sort-Object -Unique)
+
+        $graphVersion = if ($graphModule) { [string]$graphModule.Version } else { 'not loaded' }
+        $exoVersion   = if ($exoModule)   { [string]$exoModule.Version }   else { 'not loaded' }
+        $msalVersion  = if ($msalVersions.Count -gt 0) { $msalVersions -join ', ' } else { 'unknown' }
+
+        $lines = @(
+            'Connect-MgGraph failed because an incompatible Microsoft.Identity.Client (MSAL) assembly is already loaded in this PowerShell session.'
+            'This usually happens when ExchangeOnlineManagement was loaded before Microsoft.Graph.Authentication; .NET cannot unload the older MSAL.'
+            ''
+            "  Microsoft.Graph.Authentication : $graphVersion"
+            "  ExchangeOnlineManagement       : $exoVersion"
+            "  Loaded Microsoft.Identity.Client: $msalVersion"
+            ''
+            'To resolve:'
+            '  1. Open a new PowerShell session and run the Graph-based command (or Connect-MgGraph) before any Exchange Online command.'
+            '  2. If it persists, update both modules and restart PowerShell:'
+            '       Update-Module Microsoft.Graph.Authentication, ExchangeOnlineManagement'
+            ''
+            "Original error: $message"
+        )
+
+        throw ($lines -join [Environment]::NewLine)
+    }
 }
