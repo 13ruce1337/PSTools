@@ -1,7 +1,7 @@
 @{
     RootModule            = 'PSTools.psm1'
 
-    ModuleVersion         = '2.1.0'
+    ModuleVersion         = '2.2.0'
 
     GUID                  = 'b7c1f6a2-3d54-4e8f-9a1b-6c2e0d7f4a93'
 
@@ -22,6 +22,7 @@
         'New-DebianVM'
 
         # M365
+        'Get-M365MailboxSpaceReport'
         'Get-M365Room'
         'Get-M365RoomList'
     )
