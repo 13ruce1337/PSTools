@@ -9,11 +9,14 @@ function Get-M365AdminMfaReport {
         a role-assignable group, then checks their registered authentication
         methods and classifies their MFA strength:
 
-            Phishing-resistant  FIDO2, Windows Hello for Business, platform credential, certificate
-            Enabled             Microsoft Authenticator, software/hardware OATH token
-            Weak (phone only)   SMS / voice only
-            Disabled            Only password / email / Temporary Access Pass
-            Unknown             Authentication methods could not be read
+            Phishing-resistant         FIDO2, Windows Hello for Business, platform credential, certificate
+            Enabled                    Microsoft Authenticator, software/hardware OATH token
+            Weak (phone only)          SMS / voice only
+            Disabled                   Only password / email / Temporary Access Pass
+            Unknown                    Authentication methods could not be read
+            External (partner tenant)  Role held by a partner (CSP DAP/GDAP) group such as
+                                       AdminAgents / HelpdeskAgents. Its members live in the
+                                       partner's tenant, so their MFA cannot be read here.
 
         Report objects are written to the pipeline and exported to CSV in
         -OutputPath unless -NoExport is specified.
@@ -86,16 +89,52 @@ function Get-M365AdminMfaReport {
         }
     }
 
-    # Returns the user ids of all (transitive) members of a group, cached.
+    # Records a role label against an external (partner tenant) group.
+    function Add-ExternalRole {
+        param([string]$GroupId, [string]$DisplayName, [string]$RoleLabel)
+        if (-not $externalGroups.ContainsKey($GroupId)) {
+            $externalGroups[$GroupId] = [pscustomobject]@{
+                DisplayName = $DisplayName
+                Roles       = [System.Collections.Generic.List[string]]::new()
+            }
+        }
+        if (-not $externalGroups[$GroupId].Roles.Contains($RoleLabel)) {
+            $externalGroups[$GroupId].Roles.Add($RoleLabel)
+        }
+    }
+
+    # Returns the user ids of all (transitive) members of a group, or $null if
+    # the group cannot be expanded. Results (including failures) are cached so
+    # each group is queried at most once.
     function Get-GroupUserIds {
-        param([string]$GroupId)
-        if (-not $groupMemberCache.ContainsKey($GroupId)) {
+        param([string]$GroupId, [string]$DisplayName)
+
+        if ($groupMemberCache.ContainsKey($GroupId)) {
+            return $groupMemberCache[$GroupId]
+        }
+
+        try {
             $uri = "v1.0/groups/$($GroupId)/transitiveMembers?`$select=id"
             $memberIds = @(Invoke-GraphPagedRequest -Uri $uri |
                 Where-Object { $_.'@odata.type' -eq '#microsoft.graph.user' } |
                 ForEach-Object { $_.id })
             $groupMemberCache[$GroupId] = $memberIds
         }
+        catch {
+            $groupMemberCache[$GroupId] = $null
+            $message = [string]$_.Exception.Message
+
+            if ($message -match 'NotFound|404') {
+                # Partner (CSP DAP/GDAP) groups such as AdminAgents / HelpdeskAgents live in
+                # the partner's tenant and cannot be expanded from the customer tenant.
+                $externalGroupIds[$GroupId] = $true
+                Write-Verbose "Group '$DisplayName' ($GroupId) is not in this tenant; treating it as an external partner group."
+            }
+            else {
+                Write-Warning "Could not expand members of role group '$DisplayName': $message"
+            }
+        }
+
         return $groupMemberCache[$GroupId]
     }
 
@@ -126,14 +165,20 @@ function Get-M365AdminMfaReport {
                 Add-AdminRole -UserId $Assignment.principalId -RoleLabel $label
             }
             '#microsoft.graph.group' {
-                $groupLabel = "$label via $($principal.displayName)"
-                try {
-                    foreach ($memberId in (Get-GroupUserIds -GroupId $Assignment.principalId)) {
-                        Add-AdminRole -UserId $memberId -RoleLabel $groupLabel
+                $groupId   = [string]$Assignment.principalId
+                $groupName = [string]$principal.displayName
+                $memberIds = Get-GroupUserIds -GroupId $groupId -DisplayName $groupName
+
+                if ($null -eq $memberIds) {
+                    if ($externalGroupIds.ContainsKey($groupId)) {
+                        Add-ExternalRole -GroupId $groupId -DisplayName $groupName -RoleLabel $label
                     }
+                    return
                 }
-                catch {
-                    Write-Warning "Could not expand members of role group '$($principal.displayName)': $($_.Exception.Message)"
+
+                $groupLabel = "$label via $groupName"
+                foreach ($memberId in $memberIds) {
+                    Add-AdminRole -UserId $memberId -RoleLabel $groupLabel
                 }
             }
             default {
@@ -171,6 +216,8 @@ function Get-M365AdminMfaReport {
 
     $admins           = @{}
     $groupMemberCache = @{}
+    $externalGroupIds = @{}
+    $externalGroups   = @{}
     $roleNames        = @{}
 
     Write-Host 'Reading directory role definitions...'
@@ -197,7 +244,11 @@ function Get-M365AdminMfaReport {
         }
     }
 
-    if ($admins.Count -eq 0) {
+    if ($externalGroups.Count -gt 0) {
+        Write-Host "$($externalGroups.Count) role-holding group(s) belong to a partner tenant (CSP DAP/GDAP); their members' MFA is managed by the partner and is listed as 'External (partner tenant)'." -ForegroundColor Yellow
+    }
+
+    if ($admins.Count -eq 0 -and $externalGroups.Count -eq 0) {
         Write-Warning 'No users with directory roles were found.'
         return
     }
@@ -267,6 +318,19 @@ function Get-M365AdminMfaReport {
             MfaStatus         = $mfaStatus
             StrongestMethod   = $strongestMethod
             RegisteredMethods = $methodNames -join '; '
+        })
+    }
+
+    # Partner (CSP) groups: one row per group, MFA is enforced by the partner tenant.
+    foreach ($external in $externalGroups.Values) {
+        $report.Add([pscustomobject]@{
+            DisplayName       = $external.DisplayName
+            UserPrincipalName = $null
+            AccountEnabled    = $null
+            Roles             = (@($external.Roles) | Sort-Object) -join '; '
+            MfaStatus         = 'External (partner tenant)'
+            StrongestMethod   = $null
+            RegisteredMethods = $null
         })
     }
 
