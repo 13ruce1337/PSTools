@@ -79,6 +79,7 @@ function Get-M365GroupMember {
 
         $memberSegment = if ($Transitive) { 'transitiveMembers' } else { 'members' }
         $invalidChars  = [System.IO.Path]::GetInvalidFileNameChars()
+        $sortProperties = @('LastName', 'FirstName')
     }
 
     process {
@@ -123,17 +124,21 @@ function Get-M365GroupMember {
                 continue
             }
 
-            # Transitive queries can return the same user more than once.
-            $results = @($members |
-                Sort-Object -Property id -Unique |
-                ForEach-Object {
-                    [pscustomobject]@{
-                        FirstName = $_.givenName
-                        LastName  = $_.surname
-                        Email     = $_.mail
-                    }
-                } |
-                Sort-Object -Property LastName, FirstName)
+            # Transitive queries can return the same user more than once; de-duplicate by id.
+            $seenIds  = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+            $unsorted = [System.Collections.Generic.List[object]]::new()
+
+            foreach ($member in $members) {
+                if (-not $seenIds.Add([string]$member.id)) { continue }
+
+                $unsorted.Add([pscustomobject]@{
+                    FirstName = $member.givenName
+                    LastName  = $member.surname
+                    Email     = $member.mail
+                })
+            }
+
+            $results = @($unsorted | Sort-Object -Property $sortProperties)
 
             #----------------------------------------------------------[Export]----------------------------------------------------------
 
