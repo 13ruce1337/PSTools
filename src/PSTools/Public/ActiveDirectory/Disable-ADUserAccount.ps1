@@ -107,6 +107,13 @@ function Disable-ADUserAccount {
         if ($Server)     { $adParams.Server     = $Server }
         if ($Credential) { $adParams.Credential = $Credential }
 
+        # Extra user attributes to retrieve (explicit array rather than an inline comma list).
+        $userProperties = @(
+            'Description'
+            'MemberOf'
+            'UserPrincipalName'
+        )
+
         # Validate the target OU once, before touching any user.
         if ($TargetOU) {
             try {
@@ -175,7 +182,7 @@ function Disable-ADUserAccount {
             #----------------------------------------------------------[Lookup]----------------------------------------------------------
 
             try {
-                $adUser = Get-ADUser -Identity $id -Properties Description, MemberOf, UserPrincipalName @adParams -ErrorAction Stop
+                $adUser = Get-ADUser -Identity $id -Properties $userProperties @adParams -ErrorAction Stop
             }
             catch {
                 Write-Error "Unable to find AD user '$id': $($_.Exception.Message)"
