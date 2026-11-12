@@ -4,10 +4,11 @@
 # only the Public ones.
 #
 # Layout: functions are grouped by area in subfolders, for example:
-#   Public\FileSystem\  File system / disk usage
-#   Public\M365\        Microsoft 365 / Exchange Online
-#   Public\HyperV\      Hyper-V provisioning
-#   Public\Network\     Networking (Meraki, etc.)
+#   Public\ActiveDirectory\  On-premises Active Directory
+#   Public\FileSystem\       File system / disk usage
+#   Public\M365\             Microsoft 365 / Exchange Online
+#   Public\HyperV\           Hyper-V provisioning
+#   Public\Network\          Networking (Meraki, etc.)
 #
 # To add a command, drop a file named after the function into the appropriate
 # Public\<Area>\ folder and add its name to FunctionsToExport in PSTools.psd1.

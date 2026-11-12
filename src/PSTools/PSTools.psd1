@@ -1,7 +1,7 @@
 @{
     RootModule            = 'PSTools.psm1'
 
-    ModuleVersion         = '2.4.1'
+    ModuleVersion         = '2.5.0'
 
     GUID                  = 'b7c1f6a2-3d54-4e8f-9a1b-6c2e0d7f4a93'
 
@@ -20,6 +20,9 @@
     FunctionsToExport     = @(
         # Users
         'Disable-User'
+
+        # ActiveDirectory
+        'Disable-ADUserAccount'
 
         # FileSystem
         'Get-DiskUsageReport'
@@ -44,7 +47,7 @@
 
     PrivateData           = @{
         PSData = @{
-            Tags       = @('IT', 'Admin', 'HyperV', 'Debian', 'Automation', 'M365', 'ExchangeOnline', 'EntraID', 'MFA', 'DiskUsage', 'Storage', 'Meraki', 'Networking')
+            Tags       = @('IT', 'Admin', 'HyperV', 'Debian', 'Automation', 'M365', 'ExchangeOnline', 'EntraID', 'MFA', 'DiskUsage', 'Storage', 'Meraki', 'Networking', 'ActiveDirectory')
             ProjectUri = 'https://github.com/13ruce1337/PSTools'
         }
     }
