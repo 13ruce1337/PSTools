@@ -15,10 +15,14 @@ function Disable-M365User {
         Groups synced from on-prem AD are skipped (handle them with Disable-ADUser).
         Dynamic groups and group-based licenses cannot be removed directly and are skipped/warned.
 
-        IMPORTANT: You must already be connected to Microsoft Graph with the required scopes:
-            Connect-MgGraph -Scopes User.ReadWrite.All, Organization.Read.All, Group.Read.All, GroupMember.ReadWrite.All
+        Requires a Microsoft Graph session with the delegated scopes:
+            User.ReadWrite.All, Organization.Read.All, Group.Read.All, GroupMember.ReadWrite.All
+        An existing Graph session with these scopes is reused; otherwise you will be prompted to sign in.
 
         An existing Exchange Online session is reused; if there is none, you will be prompted to sign in.
+
+        The signed-in account for both Microsoft Graph and Exchange Online is displayed
+        so it is clear which identity (and tenant) the changes will be made as.
 
     .PARAMETER UserPrincipalName
         UPN of the user being deprovisioned.
@@ -33,7 +37,7 @@ function Disable-M365User {
         Display names of groups to never remove the user from.
 
     .NOTES
-        Version:        2.2
+        Version:        2.3
         Author:         Trevor Cooper
         Creation Date:  10/17/24
         Mod 5/7/25:  Updated QOL, comments, function for connecting, module check/install
@@ -41,6 +45,7 @@ function Disable-M365User {
         Mod 2.0:     Split from Disable-User into M365-only function, replaced AzureAD with Graph
         Mod 2.1:     Use Assert-ExchangeOnlineConnection for the Exchange Online session
         Mod 2.2:     Use Invoke-MgGraphRequest for user/group lookups (SDK-version independent, paged, UPN-encoded)
+        Mod 2.3:     Use Assert-MgGraphConnection (shows signed-in Graph account, verifies scopes, connects if needed)
 
     .EXAMPLE
         Disable-M365User -UserPrincipalName trevor.cooper@contoso.com -ManagerUserPrincipalName tuan.pham@contoso.com -Date "10/10/24"
@@ -70,9 +75,14 @@ function Disable-M365User {
             'ExchangeOnlineManagement'
         )
 
-        if (-not (Get-MgContext)) {
-            throw "Not connected to Microsoft Graph. Run: Connect-MgGraph -Scopes User.ReadWrite.All, Organization.Read.All, Group.Read.All, GroupMember.ReadWrite.All"
-        }
+        # Graph first so its MSAL assembly is loaded before Exchange Online's.
+        $graphScopes = @(
+            'User.ReadWrite.All'
+            'Organization.Read.All'
+            'Group.Read.All'
+            'GroupMember.ReadWrite.All'
+        )
+        Assert-MgGraphConnection -Scopes $graphScopes
 
         Assert-ExchangeOnlineConnection
     }
