@@ -6,7 +6,8 @@ function Assert-ExchangeOnlineConnection
 
     .DESCRIPTION
         Reuses an existing Exchange Online session if one is connected, otherwise
-        calls Connect-ExchangeOnline.
+        calls Connect-ExchangeOnline. The signed-in account is always displayed so
+        it is clear which identity (and tenant) commands will run as.
 
         ExchangeOnlineManagement and Microsoft.Graph.Authentication each ship their
         own Microsoft.Identity.Client (MSAL) assembly, and only the first one loaded
@@ -49,13 +50,28 @@ function Assert-ExchangeOnlineConnection
         Import-Module ExchangeOnlineManagement -ErrorAction Stop
     }
 
-    $connection = Get-ConnectionInformation -ErrorAction SilentlyContinue |
-        Where-Object { $_.State -eq 'Connected' } |
-        Select-Object -First 1
+    # Returns the first connected Exchange Online session, or $null.
+    $getConnection = {
+        Get-ConnectionInformation -ErrorAction SilentlyContinue |
+            Where-Object { $_.State -eq 'Connected' } |
+            Select-Object -First 1
+    }
+
+    # Builds a display string such as "user@contoso.com (tenant 1234...)".
+    $describeConnection = {
+        param($Connection)
+        $account = [string]$Connection.UserPrincipalName
+        if ([string]::IsNullOrWhiteSpace($account)) { $account = 'unknown account' }
+        $tenant = [string]$Connection.TenantID
+        if (-not [string]::IsNullOrWhiteSpace($tenant)) { $account += " (tenant $tenant)" }
+        return $account
+    }
+
+    $connection = & $getConnection
 
     if ($connection)
     {
-        Write-Verbose "Using existing Exchange Online connection as '$($connection.UserPrincipalName)'."
+        Write-Host "Exchange Online: using existing connection as $(& $describeConnection $connection)" -ForegroundColor DarkCyan
         return
     }
 
@@ -71,4 +87,15 @@ function Assert-ExchangeOnlineConnection
 
     Write-Verbose 'Connecting to Exchange Online.'
     Connect-ExchangeOnline @connectParams
+
+    $connection = & $getConnection
+
+    if ($connection)
+    {
+        Write-Host "Exchange Online: connected as $(& $describeConnection $connection)" -ForegroundColor DarkCyan
+    }
+    else
+    {
+        Write-Warning 'Exchange Online: connected, but the signed-in account could not be determined.'
+    }
 }

@@ -8,7 +8,9 @@ function Assert-MgGraphConnection
         Reuses an existing Microsoft Graph session when it already has every
         requested scope (a '.ReadWrite.' scope satisfies the matching '.Read.'
         scope). App-only sessions are reused as-is. Otherwise Connect-MgGraph is
-        called with the requested scopes.
+        called with the requested scopes. The signed-in account (or app, for
+        app-only sessions) is always displayed so it is clear which identity
+        (and tenant) commands will run as.
 
         If the connection fails because an incompatible Microsoft.Identity.Client
         (MSAL) assembly was already loaded by another module (typically
@@ -34,13 +36,33 @@ function Assert-MgGraphConnection
         Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
     }
 
+    # Builds a display string such as "user@contoso.com (tenant 1234...)" or "app 'MyApp' (tenant ...)".
+    $describeContext = {
+        param($Context)
+        if ([string]$Context.AuthType -eq 'AppOnly')
+        {
+            $app = [string]$Context.AppName
+            if ([string]::IsNullOrWhiteSpace($app)) { $app = [string]$Context.ClientId }
+            $identity = "app '$app' (app-only)"
+        }
+        else
+        {
+            $identity = [string]$Context.Account
+            if ([string]::IsNullOrWhiteSpace($identity)) { $identity = 'unknown account' }
+        }
+
+        $tenant = [string]$Context.TenantId
+        if (-not [string]::IsNullOrWhiteSpace($tenant)) { $identity += " (tenant $tenant)" }
+        return $identity
+    }
+
     $context = Get-MgContext
 
     if ($context)
     {
         if ([string]$context.AuthType -eq 'AppOnly')
         {
-            Write-Verbose "Using existing app-only Microsoft Graph connection (app '$($context.AppName)')."
+            Write-Host "Microsoft Graph: using existing connection as $(& $describeContext $context)" -ForegroundColor DarkCyan
             return
         }
 
@@ -51,11 +73,11 @@ function Assert-MgGraphConnection
 
         if ($missing.Count -eq 0)
         {
-            Write-Verbose "Using existing Microsoft Graph connection as '$($context.Account)'."
+            Write-Host "Microsoft Graph: using existing connection as $(& $describeContext $context)" -ForegroundColor DarkCyan
             return
         }
 
-        Write-Host "Existing Graph session is missing scopes: $($missing -join ', '). Reconnecting." -ForegroundColor Yellow
+        Write-Host "Existing Graph session ($(& $describeContext $context)) is missing scopes: $($missing -join ', '). Reconnecting." -ForegroundColor Yellow
     }
 
     Write-Verbose 'Connecting to Microsoft Graph.'
@@ -104,5 +126,15 @@ function Assert-MgGraphConnection
         )
 
         throw ($lines -join [Environment]::NewLine)
+    }
+
+    $context = Get-MgContext
+    if ($context)
+    {
+        Write-Host "Microsoft Graph: connected as $(& $describeContext $context)" -ForegroundColor DarkCyan
+    }
+    else
+    {
+        Write-Warning 'Microsoft Graph: connected, but the signed-in account could not be determined.'
     }
 }
