@@ -1,15 +1,15 @@
 function Get-M365GroupMember {
     <#
     .SYNOPSIS
-        Lists the user members of an Entra ID / Microsoft 365 group and exports them to CSV.
+        Lists the user members of an Entra ID / Microsoft 365 group, optionally exporting them to CSV.
 
     .DESCRIPTION
         Looks up a group by display name and returns the first name, last name
         and email address of each user member. Devices, contacts and nested
         groups are skipped. Use -Transitive to also include users in nested groups.
 
-        Results are written to the pipeline and exported to CSV in -OutputPath
-        unless -NoExport is specified.
+        Results are written to the pipeline. Use -Export to also write them to a
+        CSV file in -OutputPath.
 
     .PARAMETER GroupName
         Display name of the group. Accepts pipeline input.
@@ -17,21 +17,21 @@ function Get-M365GroupMember {
     .PARAMETER Transitive
         Include users who are members through nested groups.
 
-    .PARAMETER OutputPath
-        Folder for the CSV export. Created if it does not exist.
-        Default: $env:TEMP\PSTools
+    .PARAMETER Export
+        Also export the results to a CSV file in -OutputPath.
 
-    .PARAMETER NoExport
-        Do not write a CSV file.
+    .PARAMETER OutputPath
+        Folder for the CSV export (used with -Export). Created if it does not exist.
+        Default: $env:TEMP\PSTools
 
     .EXAMPLE
         Get-M365GroupMember -GroupName 'Finance Team'
 
     .EXAMPLE
-        Get-M365GroupMember -GroupName 'All Staff' -Transitive -OutputPath C:\Temp
+        Get-M365GroupMember -GroupName 'All Staff' -Transitive -Export -OutputPath C:\Temp
 
     .EXAMPLE
-        'Sales', 'Marketing' | Get-M365GroupMember -NoExport | Format-Table
+        'Sales', 'Marketing' | Get-M365GroupMember | Format-Table
 
     .NOTES
         Requires the Microsoft.Graph.Authentication module and the delegated scopes:
@@ -47,10 +47,10 @@ function Get-M365GroupMember {
 
         [switch]$Transitive,
 
-        [ValidateNotNullOrEmpty()]
-        [string]$OutputPath = (Join-Path $env:TEMP 'PSTools'),
+        [switch]$Export,
 
-        [switch]$NoExport
+        [ValidateNotNullOrEmpty()]
+        [string]$OutputPath = (Join-Path $env:TEMP 'PSTools')
     )
 
     begin {
@@ -73,7 +73,7 @@ function Get-M365GroupMember {
             }
         }
 
-        if (-not $NoExport -and -not (Test-Path -LiteralPath $OutputPath)) {
+        if ($Export -and -not (Test-Path -LiteralPath $OutputPath)) {
             $null = New-Item -ItemType Directory -Path $OutputPath -Force
         }
 
@@ -137,7 +137,7 @@ function Get-M365GroupMember {
 
             #----------------------------------------------------------[Export]----------------------------------------------------------
 
-            if (-not $NoExport) {
+            if ($Export) {
                 $fileName   = -join ($group.displayName.ToCharArray() | ForEach-Object { if ($invalidChars -contains $_) { '_' } else { $_ } })
                 $exportPath = Join-Path $OutputPath "GroupMembers_$($fileName)_$(Get-Date -Format 'yyyyMMdd_HHmm').csv"
                 $results | Export-Csv -Path $exportPath -NoTypeInformation
