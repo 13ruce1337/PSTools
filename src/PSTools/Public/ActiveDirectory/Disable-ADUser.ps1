@@ -54,10 +54,7 @@ function Disable-ADUser {
         Return a result object for each user.
 
     .NOTES
-        Version:        1.1
-        Author:         Trevor Cooper
-        Purpose/Change: Split from Disable-User into an AD-only function
-        Mod 1.1:        Renamed from Disable-ADUserAccount to Disable-ADUser to match the file name
+        Requires RSAT (the ActiveDirectory module).
 
     .EXAMPLE
         Disable-ADUser -Identity trevor.cooper

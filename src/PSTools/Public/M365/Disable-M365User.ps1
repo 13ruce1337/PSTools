@@ -37,15 +37,9 @@ function Disable-M365User {
         Display names of groups to never remove the user from.
 
     .NOTES
-        Version:        2.3
-        Author:         Trevor Cooper
-        Creation Date:  10/17/24
-        Mod 5/7/25:  Updated QOL, comments, function for connecting, module check/install
-        Mod 5/14/25: Added function for main components, added ability to take a CSV
-        Mod 2.0:     Split from Disable-User into M365-only function, replaced AzureAD with Graph
-        Mod 2.1:     Use Assert-ExchangeOnlineConnection for the Exchange Online session
-        Mod 2.2:     Use Invoke-MgGraphRequest for user/group lookups (SDK-version independent, paged, UPN-encoded)
-        Mod 2.3:     Use Assert-MgGraphConnection (shows signed-in Graph account, verifies scopes, connects if needed)
+        Requires the Microsoft.Graph.Authentication, Microsoft.Graph.Users,
+        Microsoft.Graph.Users.Actions, Microsoft.Graph.Groups and
+        ExchangeOnlineManagement modules (installed automatically if missing).
 
     .EXAMPLE
         Disable-M365User -UserPrincipalName trevor.cooper@contoso.com -ManagerUserPrincipalName tuan.pham@contoso.com -Date "10/10/24"

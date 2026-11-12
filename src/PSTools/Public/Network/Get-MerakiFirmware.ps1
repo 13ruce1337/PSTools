@@ -12,12 +12,7 @@ function Get-MerakiFirmware {
         Outputs a CSV file in the same directory as this file.
 
     .NOTES
-        Version:        1.0
-        Author:         Trevor Cooper
-        Creation Date:  8/7/2025
-        Purpose/Change: Initial script development
-
-        Addendum: I'm aware /networks/$($network.id)/devices is deprecated and am working to replace.
+        Uses the deprecated /networks/$($network.id)/devices endpoint; this is due to be replaced.
     
     .LINK
         https://developer.cisco.com/meraki/api-v1/
@@ -43,9 +38,6 @@ function Get-MerakiFirmware {
     $device_list = @()
 
     #----------------------------------------------------------[Declarations]----------------------------------------------------------
-
-    #Script Version
-    [float]$script:script_version = 1.0
 
     #Logging
     [string]$script:log_path = "C:\Windows\Temp"
