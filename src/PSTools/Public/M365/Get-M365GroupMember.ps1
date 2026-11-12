@@ -4,15 +4,22 @@ function Get-M365GroupMember {
         Lists the user members of an Entra ID / Microsoft 365 group, optionally exporting them to CSV.
 
     .DESCRIPTION
-        Looks up a group by display name and returns the first name, last name
-        and email address of each user member. Devices, contacts and nested
-        groups are skipped. Use -Transitive to also include users in nested groups.
+        Looks up a group by display name or email address and returns the first
+        name, last name and email address of each user member. Devices, contacts
+        and nested groups are skipped. Use -Transitive to also include users in
+        nested groups.
+
+        If the value looks like an email address it is matched against the
+        group's primary mail address first, then its proxy (alias) addresses,
+        then its display name. Otherwise it is matched against the display name.
+        Additional lookups only happen when the earlier ones find nothing, so the
+        common case is a single request.
 
         Results are written to the pipeline. Use -Export to also write them to a
         CSV file in -OutputPath.
 
     .PARAMETER GroupName
-        Display name of the group. Accepts pipeline input.
+        Display name or email address of the group. Accepts pipeline input.
 
     .PARAMETER Transitive
         Include users who are members through nested groups.
@@ -28,10 +35,13 @@ function Get-M365GroupMember {
         Get-M365GroupMember -GroupName 'Finance Team'
 
     .EXAMPLE
+        Get-M365GroupMember -GroupName finance@contoso.com
+
+    .EXAMPLE
         Get-M365GroupMember -GroupName 'All Staff' -Transitive -Export -OutputPath C:\Temp
 
     .EXAMPLE
-        'Sales', 'Marketing' | Get-M365GroupMember | Format-Table
+        'Sales', 'marketing@contoso.com' | Get-M365GroupMember | Format-Table
 
     .NOTES
         Requires the Microsoft.Graph.Authentication module and the delegated scopes:
@@ -41,7 +51,7 @@ function Get-M365GroupMember {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory, Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-        [Alias('DisplayName', 'Group')]
+        [Alias('DisplayName', 'Group', 'Identity')]
         [ValidateNotNullOrEmpty()]
         [string[]]$GroupName,
 
@@ -77,9 +87,10 @@ function Get-M365GroupMember {
             $null = New-Item -ItemType Directory -Path $OutputPath -Force
         }
 
-        $memberSegment = if ($Transitive) { 'transitiveMembers' } else { 'members' }
-        $invalidChars  = [System.IO.Path]::GetInvalidFileNameChars()
+        $memberSegment  = if ($Transitive) { 'transitiveMembers' } else { 'members' }
+        $invalidChars   = [System.IO.Path]::GetInvalidFileNameChars()
         $sortProperties = @('LastName', 'FirstName')
+        $emailPattern   = '^[^@\s]+@[^@\s]+\.[^@\s]+$'
     }
 
     process {
@@ -87,28 +98,55 @@ function Get-M365GroupMember {
 
             #----------------------------------------------------------[Find group]----------------------------------------------------------
 
-            # Escape single quotes for the OData filter, then URL-encode it.
-            $safeName  = $name -replace "'", "''"
-            $filter    = [uri]::EscapeDataString("displayName eq '$safeName'")
-            $groupsUri = "v1.0/groups?`$filter=$filter&`$select=id,displayName"
+            # Escape single quotes for the OData filter values.
+            $safeName = $name.Trim() -replace "'", "''"
 
-            try {
-                $groups = @(Invoke-GraphPagedRequest -Uri $groupsUri)
+            # Ordered list of lookups; later ones only run if earlier ones find nothing.
+            $lookups = [System.Collections.Generic.List[object]]::new()
+            if ($name.Trim() -match $emailPattern) {
+                $lookups.Add(@{ Label = 'email address'; Filter = "mail eq '$safeName'" })
+                $lookups.Add(@{ Label = 'proxy address'; Filter = "proxyAddresses/any(p:p eq 'smtp:$safeName')" })
             }
-            catch {
-                Write-Error "Unable to search for group '$name': $($_.Exception.Message)"
-                continue
+            $lookups.Add(@{ Label = 'display name'; Filter = "displayName eq '$safeName'" })
+
+            $groups      = @()
+            $matchedBy   = $null
+            $lookupError = $null
+
+            foreach ($lookup in $lookups) {
+                $filter    = [uri]::EscapeDataString($lookup.Filter)
+                $groupsUri = "v1.0/groups?`$filter=$filter&`$select=id,displayName,mail"
+
+                try {
+                    $groups = @(Invoke-GraphPagedRequest -Uri $groupsUri)
+                }
+                catch {
+                    $lookupError = $_.Exception.Message
+                    Write-Verbose "Lookup of '$name' by $($lookup.Label) failed: $lookupError"
+                    continue
+                }
+
+                if ($groups.Count -gt 0) {
+                    $matchedBy = $lookup.Label
+                    break
+                }
             }
 
             if ($groups.Count -eq 0) {
-                Write-Error "Group '$name' not found."
+                if ($lookupError) {
+                    Write-Error "Unable to find group '$name': $lookupError"
+                }
+                else {
+                    Write-Error "Group '$name' not found."
+                }
                 continue
             }
 
             if ($groups.Count -gt 1) {
-                Write-Warning "Multiple groups named '$name' found. Using the first one ($($groups[0].id))."
+                Write-Warning "Multiple groups with $matchedBy '$name' found. Using the first one ($($groups[0].displayName), $($groups[0].id))."
             }
             $group = $groups[0]
+            Write-Verbose "Matched '$name' by $matchedBy to group '$($group.displayName)' ($($group.id))."
 
             #----------------------------------------------------------[Members]----------------------------------------------------------
 
