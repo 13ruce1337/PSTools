@@ -1,7 +1,7 @@
 @{
     RootModule            = 'PSTools.psm1'
 
-    ModuleVersion         = '2.5.0'
+    ModuleVersion         = '2.6.0'
 
     GUID                  = 'b7c1f6a2-3d54-4e8f-9a1b-6c2e0d7f4a93'
 
@@ -17,10 +17,8 @@
 
     # Export explicitly (faster command discovery than wildcards).
     # Keep this list in sync with the files in Public\ (including subfolders).
+    # Each file must be named after the function it defines.
     FunctionsToExport     = @(
-        # Users
-        'Disable-User'
-
         # ActiveDirectory
         'Disable-ADUserAccount'
 
@@ -34,6 +32,7 @@
         # M365
         'Disable-M365User'
         'Get-M365AdminMfaReport'
+        'Get-M365GroupMember'
         'Get-M365MailboxSpaceReport'
         'Get-M365Room'
         'Get-M365RoomList'
@@ -47,7 +46,7 @@
 
     PrivateData           = @{
         PSData = @{
-            Tags       = @('IT', 'Admin', 'HyperV', 'Debian', 'Automation', 'M365', 'ExchangeOnline', 'EntraID', 'MFA', 'DiskUsage', 'Storage', 'Meraki', 'Networking', 'ActiveDirectory')
+            Tags       = @('IT', 'Admin', 'HyperV', 'Debian', 'Automation', 'M365', 'ExchangeOnline', 'EntraID', 'MFA', 'Groups', 'DiskUsage', 'Storage', 'Meraki', 'Networking', 'ActiveDirectory')
             ProjectUri = 'https://github.com/13ruce1337/PSTools'
         }
     }
