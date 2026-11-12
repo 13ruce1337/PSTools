@@ -20,7 +20,7 @@
     # Each file must be named after the function it defines.
     FunctionsToExport     = @(
         # ActiveDirectory
-        'Disable-ADUserAccount'
+        'Disable-ADUser'
 
         # FileSystem
         'Get-DiskUsageReport'

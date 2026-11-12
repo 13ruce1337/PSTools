@@ -1,4 +1,4 @@
-function Disable-ADUserAccount {
+function Disable-ADUser {
     <#
     .SYNOPSIS
         Deprovisions a user in on-premises Active Directory.
@@ -54,21 +54,22 @@ function Disable-ADUserAccount {
         Return a result object for each user.
 
     .NOTES
-        Version:        1.0
+        Version:        1.1
         Author:         Trevor Cooper
         Purpose/Change: Split from Disable-User into an AD-only function
+        Mod 1.1:        Renamed from Disable-ADUserAccount to Disable-ADUser to match the file name
 
     .EXAMPLE
-        Disable-ADUserAccount -Identity trevor.cooper
+        Disable-ADUser -Identity trevor.cooper
 
     .EXAMPLE
-        Disable-ADUserAccount -Identity trevor.cooper -ResetPassword -HideFromAddressList -TargetOU 'OU=Disabled Users,DC=contoso,DC=com'
+        Disable-ADUser -Identity trevor.cooper -ResetPassword -HideFromAddressList -TargetOU 'OU=Disabled Users,DC=contoso,DC=com'
 
     .EXAMPLE
-        Import-Csv .\leavers.csv | Disable-ADUserAccount -WhatIf
+        Import-Csv .\leavers.csv | Disable-ADUser -WhatIf
 
     .EXAMPLE
-        $result = Disable-ADUserAccount -Identity trevor.cooper -PassThru
+        $result = Disable-ADUser -Identity trevor.cooper -PassThru
         $result.RemovedGroups
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]

@@ -12,7 +12,7 @@ function Disable-M365User {
         - Removes mobile device partnerships
         - Removes directly assigned licenses
 
-        Groups synced from on-prem AD are skipped (handle them with Disable-ADUserAccount).
+        Groups synced from on-prem AD are skipped (handle them with Disable-ADUser).
         Dynamic groups and group-based licenses cannot be removed directly and are skipped/warned.
 
         IMPORTANT: You must already be connected to Microsoft Graph with the required scopes:
