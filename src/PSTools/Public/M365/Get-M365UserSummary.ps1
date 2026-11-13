@@ -22,7 +22,8 @@ function Get-M365UserSummary {
             Mobile devices  Devices with an Exchange ActiveSync partnership
 
         Each section is retrieved independently; if one cannot be read a note is
-        shown and the rest of the report continues.
+        shown and the rest of the report continues. Use -Verbose to see the full
+        error details.
 
         The report is written to the console. Use -PassThru to also return a
         report object.
@@ -145,6 +146,33 @@ function Get-M365UserSummary {
             if ([string]::IsNullOrEmpty($Text)) { return $Text }
             if ($Text.Length -le $Length) { return $Text }
             return $Text.Substring(0, $Length) + '...'
+        }
+
+        # Reduces a verbose Exchange Online REST error (which embeds the full JSON
+        # response) to its core message. The full error is written to the verbose stream.
+        function Get-ExoErrorMessage {
+            param($ErrorRecord)
+            $full = [string]$ErrorRecord.Exception.Message
+            Write-Verbose "Exchange Online error: $full"
+
+            $message = $full
+            $match = [regex]::Match($full, '"message"\s*:\s*"((?:[^"\\]|\\.)*)"')
+            if ($match.Success) {
+                $message = $match.Groups[1].Value -replace '\\"', '"'
+            }
+
+            # Drop internal server names such as "on 'CH5PR16A05DC002.NAMPR16A005.PROD.OUTLOOK.COM'".
+            $message = $message -replace "\s+on\s+'[^']+\.OUTLOOK\.COM'", ''
+            $message = $message -replace '^Error executing request\.\s*', ''
+            return (Get-ShortText $message.Trim() 300)
+        }
+
+        # True when an Exchange Online error means the object does not exist.
+        function Test-ExoNotFound {
+            param($ErrorRecord)
+            $text = [string]$ErrorRecord.Exception.Message
+            return ($text -match 'ManagementObjectNotFoundException|HttpStatusCode=404|couldn''t be found') -or
+                   ([string]$ErrorRecord.CategoryInfo.Reason -eq 'ManagementObjectNotFoundException')
         }
 
         function Write-Section {
@@ -522,7 +550,13 @@ function Get-M365UserSummary {
                     $mailbox = Get-EXOMailbox -Identity $upn -Properties $mailboxProperties -ErrorAction Stop
                 }
                 catch {
-                    Write-Host "  No Exchange Online mailbox found ($($_.Exception.Message))" -ForegroundColor Gray
+                    if (Test-ExoNotFound $_) {
+                        Write-Verbose "Get-EXOMailbox for $($upn): $($_.Exception.Message)"
+                        Write-Host '  No Exchange Online mailbox (user may not have an Exchange license, or the mailbox is not provisioned yet)' -ForegroundColor Gray
+                    }
+                    else {
+                        Write-Warning "Unable to read mailbox: $(Get-ExoErrorMessage $_)"
+                    }
                 }
 
                 if ($mailbox) {
@@ -534,7 +568,7 @@ function Get-M365UserSummary {
                         $stats = Get-EXOMailboxStatistics -Identity $address -Properties $statsProperties -ErrorAction Stop
                     }
                     catch {
-                        Write-Warning "Unable to read mailbox statistics: $($_.Exception.Message)"
+                        Write-Warning "Unable to read mailbox statistics: $(Get-ExoErrorMessage $_)"
                     }
 
                     $forwardTargets = @()
@@ -583,7 +617,7 @@ function Get-M365UserSummary {
                         }
                     }
                     catch {
-                        Write-Warning "Unable to read mailbox permissions: $($_.Exception.Message)"
+                        Write-Warning "Unable to read mailbox permissions: $(Get-ExoErrorMessage $_)"
                     }
 
                     try {
@@ -597,7 +631,7 @@ function Get-M365UserSummary {
                         }
                     }
                     catch {
-                        Write-Warning "Unable to read SendAs permissions: $($_.Exception.Message)"
+                        Write-Warning "Unable to read SendAs permissions: $(Get-ExoErrorMessage $_)"
                     }
 
                     foreach ($delegate in @($mailbox.GrantSendOnBehalfTo)) {
@@ -647,7 +681,7 @@ function Get-M365UserSummary {
                         }
                     }
                     catch {
-                        Write-Warning "Unable to read out-of-office settings: $($_.Exception.Message)"
+                        Write-Warning "Unable to read out-of-office settings: $(Get-ExoErrorMessage $_)"
                     }
 
                     # --- Mobile devices ---
@@ -664,7 +698,7 @@ function Get-M365UserSummary {
                         }
                     }
                     catch {
-                        Write-Warning "Unable to read mobile devices: $($_.Exception.Message)"
+                        Write-Warning "Unable to read mobile devices: $(Get-ExoErrorMessage $_)"
                     }
                 }
             }
