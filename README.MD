@@ -1,7 +1,5 @@
 # PSTools — PowerShell IT Toolkit
 
-PSTools is a PowerShell module of everyday IT administration commands. It covers:
-
 - Microsoft 365 / Exchange Online administration and reporting
 - User deprovisioning in hybrid Active Directory / Entra ID environments
 - Hyper-V VM provisioning
@@ -107,48 +105,11 @@ New-DebianVM -Name web01 -CpuCount 2 -MemoryGB 4 -DiskGB 40 -RootPassword $pw
 - **Preview mode:** commands that make changes support `-WhatIf` and `-Confirm` where noted in their help.
 
 ---
-
-## Project layout
-
-```
-src/PSTools/
-├── PSTools.psd1      # Manifest (version, exported functions)
-├── PSTools.psm1      # Loader: dot-sources Private/ and Public/
-├── Private/          # Internal helpers (not exported)
-└── Public/
-    ├── ActiveDirectory/
-    ├── FileSystem/
-    ├── HyperV/
-    ├── M365/
-    └── Network/
-```
-
-### Adding a command
+Adding a command
 
 1. Create a file named after the function (for example `Get-Thing.ps1`) in the appropriate `Public\<Area>\` folder. The file must contain only the function definition, because any top-level code runs at import time.
 2. Add the function name to `FunctionsToExport` in `PSTools.psd1`.
 3. Add an entry under `[Unreleased]` in `CHANGELOG.md`.
-
----
-
-## Versioning
-
-PSTools follows [Semantic Versioning](https://semver.org) (`MAJOR.MINOR.PATCH`).
-
-- The module version is defined in **one place only**: `ModuleVersion` in [`src/PSTools/PSTools.psd1`](src/PSTools/PSTools.psd1). Individual functions are not versioned separately.
-- All notable changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
-- **Pre-1.0 (`0.x.y`)**: the module is still being consolidated. `MINOR` bumps add commands and *may* include breaking changes; `PATCH` bumps are fixes only.
-- **1.0.0** will mark a stable public command set with documentation, published as a GitHub release (and potentially to the PowerShell Gallery). After that, breaking changes require a `MAJOR` bump.
-
-Check the version you have:
-
-```powershell
-# From a clone of the repo
-(Import-PowerShellDataFile .\src\PSTools\PSTools.psd1).ModuleVersion
-
-# From an imported / installed module
-Get-Module PSTools -ListAvailable | Select-Object Name, Version, Path
-```
 
 Cutting a release:
 
