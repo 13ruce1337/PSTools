@@ -4,6 +4,37 @@ PSTools is a collection of standalone PowerShell scripts for everyday IT work. T
 
 ---
 
+## Versioning
+
+PSTools follows [Semantic Versioning](https://semver.org) (`MAJOR.MINOR.PATCH`).
+
+- The module version is defined in **one place only**: `ModuleVersion` in [`src/PSTools/PSTools.psd1`](src/PSTools/PSTools.psd1). Individual functions are not versioned separately.
+- All notable changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
+- **Pre-1.0 (`0.x.y`)**: the module is still being consolidated. `MINOR` bumps add commands and *may* include breaking changes; `PATCH` bumps are fixes only.
+- **1.0.0** will mark a stable public command set with documentation, published as a GitHub release (and potentially to the PowerShell Gallery). After that, breaking changes require a `MAJOR` bump.
+
+Check the version you have:
+
+```powershell
+# From a clone of the repo
+(Import-PowerShellDataFile .\src\PSTools\PSTools.psd1).ModuleVersion
+
+# From an imported / installed module
+Get-Module PSTools -ListAvailable | Select-Object Name, Version, Path
+```
+
+Cutting a release:
+
+```powershell
+Update-ModuleManifest -Path .\src\PSTools\PSTools.psd1 -ModuleVersion 0.7.0
+# Move the [Unreleased] entries in CHANGELOG.md under a new [0.7.0] heading, then:
+git commit -am "Release 0.7.0"
+git tag v0.7.0
+git push --follow-tags
+```
+
+---
+
 ## Requirements
 
 | Requirement | Details |

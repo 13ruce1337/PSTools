@@ -1,37 +1,48 @@
 @{
-    # Script module or binary module file associated with this manifest.
     RootModule            = 'PSTools.psm1'
 
-    # Version number of this module (single source of truth for versioning).
-    ModuleVersion         = '2.1.0'
+    # Versioning: Semantic Versioning (MAJOR.MINOR.PATCH). This is the ONLY place
+    # the module version is defined; do not add per-function version notes.
+    # Pre-1.0: bump MINOR for new commands / breaking changes, PATCH for fixes.
+    # Record every change in CHANGELOG.md and tag releases as vX.Y.Z.
+    ModuleVersion         = '0.6.0'
 
-    # Unique ID for this module.
     GUID                  = 'b7c1f6a2-3d54-4e8f-9a1b-6c2e0d7f4a93'
 
     Author                = 'Trevor Cooper'
     CompanyName           = 'Community'
     Copyright             = '(c) Trevor Cooper. All rights reserved.'
-    Description           = 'PowerShell IT toolkit: Hyper-V provisioning, Office deployment, driver staging, user deprovisioning and more.'
+    Description           = 'PowerShell IT toolkit: Hyper-V provisioning, Microsoft 365 administration, user deprovisioning, disk usage reporting and more.'
 
-    # Windows PowerShell 5.1 and PowerShell 7+ (Hyper-V cmdlets are Windows-only).
     PowerShellVersion     = '5.1'
     CompatiblePSEditions  = @('Desktop', 'Core')
 
-    # Heavy or optional dependencies (Hyper-V, Graph, ExchangeOnline, ...) are
-    # checked inside the functions that need them, so importing PSTools stays
-    # lightweight on machines that don't have them.
     RequiredModules       = @()
 
     # Export explicitly (faster command discovery than wildcards).
-    # Keep this list in sync with the files in Public/.
+    # Keep this list in sync with the files in Public\ (including subfolders).
+    # Each file must be named after the function it defines.
     FunctionsToExport     = @(
-        'Disable-User'
-        'Get-MerakiFirmware'
-        'Install-OfficeProduct'
+        # ActiveDirectory
+        'Disable-ADUser'
+
+        # FileSystem
+        'Get-DiskUsageReport'
+
+        # HyperV
         'New-DebianVM'
         'New-WindowsVM'
-        'Repair-OfficeProduct'
-        'Uninstall-OfficeProduct'
+
+        # M365
+        'Disable-M365User'
+        'Get-M365AdminMfaReport'
+        'Get-M365GroupMember'
+        'Get-M365MailboxSpaceReport'
+        'Get-M365Room'
+        'Get-M365RoomList'
+
+        # Network
+        'Get-MerakiFirmware'
     )
     CmdletsToExport       = @()
     VariablesToExport     = @()
@@ -39,9 +50,9 @@
 
     PrivateData           = @{
         PSData = @{
-            Tags       = @('IT', 'Admin', 'HyperV', 'Debian', 'Office', 'Automation')
-            ProjectUri = 'https://github.com/13ruce1337/PSTools'
-            # LicenseUri = 'https://github.com/13ruce1337/PSTools/blob/main/LICENSE'
+            Tags         = @('IT', 'Admin', 'HyperV', 'Debian', 'Automation', 'M365', 'ExchangeOnline', 'EntraID', 'MFA', 'Groups', 'DiskUsage', 'Storage', 'Meraki', 'Networking', 'ActiveDirectory')
+            ProjectUri   = 'https://github.com/13ruce1337/PSTools'
+            ReleaseNotes = 'See https://github.com/13ruce1337/PSTools/blob/main/CHANGELOG.md'
         }
     }
 }
