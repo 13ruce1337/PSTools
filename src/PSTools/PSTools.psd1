@@ -40,6 +40,7 @@
         'Get-M365MailboxSpaceReport'
         'Get-M365Room'
         'Get-M365RoomList'
+        'Get-M365UserSummary'
 
         # Network
         'Get-MerakiFirmware'

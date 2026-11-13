@@ -10,6 +10,12 @@ Individual functions are not versioned separately.
 
 ## [Unreleased]
 
+### Added
+- M365: `Get-M365UserSummary` - admin-center style overview of a user: account
+  status, password last set, sign-in activity, authentication methods, licenses,
+  groups and roles, mailbox details, mailbox delegates (FullAccess / SendAs /
+  SendOnBehalf), forwarding, out-of-office and mobile devices.
+
 ### Planned
 - Import remaining functions from other repositories.
 - Comment-based help / documentation for every public command.

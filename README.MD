@@ -24,6 +24,7 @@ Each command is a self-contained advanced function with comment-based help. Run 
 | **M365** | `Get-M365MailboxSpaceReport` | Breaks down mailbox space usage: folders, Recoverable Items, archive, and large sent messages. |
 | **M365** | `Get-M365Room` | Lists room mailboxes, optionally filtered by room list. |
 | **M365** | `Get-M365RoomList` | Lists room lists (locations/buildings). Pipe the output to `Get-M365Room`. |
+| **M365** | `Get-M365UserSummary` | Admin-center style overview of a user: account status, password last set, sign-ins, MFA methods, licenses, groups/roles, mailbox delegates, forwarding, out-of-office and mobile devices. |
 | **Network** | `Get-MerakiFirmware` | Exports Meraki device firmware versions and the latest available firmware per product type to CSV. |
 
 ---
@@ -44,7 +45,7 @@ Each command is a self-contained advanced function with comment-based help. Run 
 |---|---|
 | **ActiveDirectory** | RSAT (the `ActiveDirectory` module) |
 | **HyperV** | Elevated session and the Hyper-V PowerShell module. `New-DebianVM` installs QEMU (`qemu-img`) and the Windows ADK Deployment Tools (`oscdimg`) via winget if they are missing. |
-| **M365 (Graph)** | `Microsoft.Graph.Authentication`. `Disable-M365User` also needs `Microsoft.Graph.Users`, `Microsoft.Graph.Users.Actions` and `Microsoft.Graph.Groups`, and installs any that are missing. |
+| **M365 (Graph)** | `Microsoft.Graph.Authentication`. `Disable-M365User` also needs `Microsoft.Graph.Users`, `Microsoft.Graph.Users.Actions` and `Microsoft.Graph.Groups`, and installs any that are missing. `Get-M365UserSummary` requests `User.Read.All`, `GroupMember.Read.All`, `UserAuthenticationMethod.Read.All` and `AuditLog.Read.All` (sign-in activity also needs Entra ID P1). |
 | **M365 (Exchange)** | `ExchangeOnlineManagement`. The large-sent-messages section of `Get-M365MailboxSpaceReport` needs version 3.7.0+ (`Get-MessageTraceV2`). |
 | **Network** | A Meraki Dashboard API key |
 
@@ -72,6 +73,9 @@ To make it available in every session, copy `src\PSTools` into a folder on your 
 ```powershell
 # Disk usage
 Get-DiskUsageReport -Path D:\Shares -Top 25
+
+# Quick overview of a user (account, password, licenses, mailbox access, out-of-office...)
+Get-M365UserSummary -Identity user@contoso.com
 
 # Group membership, including nested groups, exported to CSV
 Get-M365GroupMember -GroupName 'All Staff' -Transitive -Export
