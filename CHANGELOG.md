@@ -16,6 +16,14 @@ Individual functions are not versioned separately.
   groups and roles, mailbox details, mailbox delegates (FullAccess / SendAs /
   SendOnBehalf), forwarding, out-of-office and mobile devices.
 
+### Changed
+- Missing modules: instead of failing (Graph / Exchange Online commands) or
+  installing silently (`Disable-M365User`), commands now say which modules are
+  missing and ask whether to install them from the PowerShell Gallery.
+  `Assert-Module` prompts by default and gains `-Force` to install without
+  prompting; `Assert-MgGraphConnection` and `Assert-ExchangeOnlineConnection`
+  now use it instead of throwing.
+
 ### Planned
 - Import remaining functions from other repositories.
 - Comment-based help / documentation for every public command.

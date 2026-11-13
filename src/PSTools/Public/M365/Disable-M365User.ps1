@@ -39,7 +39,8 @@ function Disable-M365User {
     .NOTES
         Requires the Microsoft.Graph.Authentication, Microsoft.Graph.Users,
         Microsoft.Graph.Users.Actions, Microsoft.Graph.Groups and
-        ExchangeOnlineManagement modules (installed automatically if missing).
+        ExchangeOnlineManagement modules. If any are missing you are asked
+        whether to install them.
 
     .EXAMPLE
         Disable-M365User -UserPrincipalName trevor.cooper@contoso.com -ManagerUserPrincipalName tuan.pham@contoso.com -Date "10/10/24"

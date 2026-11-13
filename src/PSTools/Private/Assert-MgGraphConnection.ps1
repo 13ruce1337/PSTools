@@ -5,6 +5,9 @@ function Assert-MgGraphConnection
         Ensures an active Microsoft Graph session exists with the required scopes, connecting if needed.
 
     .DESCRIPTION
+        If the Microsoft.Graph.Authentication module is not installed, you are
+        asked whether to install it (see Assert-Module).
+
         Reuses an existing Microsoft Graph session when it already has every
         requested scope (a '.ReadWrite.' scope satisfies the matching '.Read.'
         scope). App-only sessions are reused as-is. Otherwise Connect-MgGraph is
@@ -26,10 +29,8 @@ function Assert-MgGraphConnection
         [string[]]$Scopes
     )
 
-    if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication))
-    {
-        throw "The Microsoft.Graph.Authentication module is not installed. Install it with: Install-Module Microsoft.Graph.Authentication -Scope CurrentUser"
-    }
+    # Offers to install the module if it is missing; throws if declined or the install fails.
+    Assert-Module -Name Microsoft.Graph.Authentication
 
     if (-not (Get-Module -Name Microsoft.Graph.Authentication))
     {

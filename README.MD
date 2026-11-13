@@ -45,9 +45,11 @@ Each command is a self-contained advanced function with comment-based help. Run 
 |---|---|
 | **ActiveDirectory** | RSAT (the `ActiveDirectory` module) |
 | **HyperV** | Elevated session and the Hyper-V PowerShell module. `New-DebianVM` installs QEMU (`qemu-img`) and the Windows ADK Deployment Tools (`oscdimg`) via winget if they are missing. |
-| **M365 (Graph)** | `Microsoft.Graph.Authentication`. `Disable-M365User` also needs `Microsoft.Graph.Users`, `Microsoft.Graph.Users.Actions` and `Microsoft.Graph.Groups`, and installs any that are missing. `Get-M365UserSummary` requests `User.Read.All`, `GroupMember.Read.All`, `UserAuthenticationMethod.Read.All` and `AuditLog.Read.All` (sign-in activity also needs Entra ID P1). |
+| **M365 (Graph)** | `Microsoft.Graph.Authentication`. `Disable-M365User` also needs `Microsoft.Graph.Users`, `Microsoft.Graph.Users.Actions` and `Microsoft.Graph.Groups`. `Get-M365UserSummary` requests `User.Read.All`, `GroupMember.Read.All`, `UserAuthenticationMethod.Read.All` and `AuditLog.Read.All` (sign-in activity also needs Entra ID P1). |
 | **M365 (Exchange)** | `ExchangeOnlineManagement`. The large-sent-messages section of `Get-M365MailboxSpaceReport` needs version 3.7.0+ (`Get-MessageTraceV2`). |
 | **Network** | A Meraki Dashboard API key |
+
+If a required Microsoft Graph or Exchange Online module is missing, you are asked whether to install it from the PowerShell Gallery (CurrentUser scope, no elevation needed). If you decline, the command stops and shows the `Install-Module` command to run.
 
 Existing Microsoft Graph and Exchange Online sessions are reused when they have the required scopes. Otherwise you are prompted to sign in. The signed-in account and tenant are always shown before any changes are made.
 

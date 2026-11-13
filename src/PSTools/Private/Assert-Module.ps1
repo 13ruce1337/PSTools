@@ -2,12 +2,18 @@ function Assert-Module
 {
     <#
     .SYNOPSIS
-        Ensures one or more PowerShell modules are installed, installing any that are missing.
+        Ensures one or more PowerShell modules are installed, offering to install any that are missing.
 
     .DESCRIPTION
         Checks whether each named module is available (Get-Module -ListAvailable).
-        Missing modules are installed from the PowerShell Gallery, in the
-        CurrentUser scope by default, so no elevation is required.
+        If any are missing, they are listed and you are asked whether to install
+        them from the PowerShell Gallery (CurrentUser scope by default, so no
+        elevation is required). Declining stops with an error that includes the
+        command to install them manually.
+
+        Use -Force to install without prompting (for unattended use). In a
+        non-interactive session without -Force, an error is thrown instead of
+        prompting.
 
         Modules are NOT imported. PowerShell auto-loads them on first use, which
         keeps the Microsoft.Identity.Client (MSAL) load order handled by
@@ -24,7 +30,10 @@ function Assert-Module
         AllUsers requires an elevated session.
 
     .PARAMETER NoInstall
-        Do not install missing modules; throw an error with install instructions instead.
+        Do not offer to install missing modules; throw an error with install instructions instead.
+
+    .PARAMETER Force
+        Install missing modules without prompting.
 
     .EXAMPLE
         Assert-Module -Name 'Microsoft.Graph.Authentication', 'ExchangeOnlineManagement'
@@ -41,7 +50,9 @@ function Assert-Module
         [ValidateSet('CurrentUser', 'AllUsers')]
         [string]$Scope = 'CurrentUser',
 
-        [switch]$NoInstall
+        [switch]$NoInstall,
+
+        [switch]$Force
     )
 
     $requested = @($Name | Select-Object -Unique)
@@ -57,21 +68,46 @@ function Assert-Module
         return
     }
 
-    $installHint = "Install-Module $($missing -join ', ') -Scope CurrentUser"
+    $missingList = $missing -join ', '
+    $installHint = "Install-Module $missingList -Scope CurrentUser"
 
     if ($NoInstall)
     {
-        throw "Required module(s) not installed: $($missing -join ', '). Install with: $installHint"
+        throw "Required module(s) not installed: $missingList. Install with: $installHint"
     }
 
     if (-not (Get-Command -Name Install-Module -ErrorAction SilentlyContinue))
     {
-        throw "Required module(s) not installed: $($missing -join ', '), and PowerShellGet (Install-Module) is not available to install them."
+        throw "Required module(s) not installed: $missingList, and PowerShellGet (Install-Module) is not available to install them."
     }
 
     if ($Scope -eq 'AllUsers' -and -not (Test-IsAdmin))
     {
         throw "Installing modules for AllUsers requires an elevated session. Re-run elevated or use -Scope CurrentUser."
+    }
+
+    # Ask before installing (skipped with -Force, and under -WhatIf where nothing is installed).
+    if (-not $Force -and -not $WhatIfPreference)
+    {
+        Write-Host "Required module(s) not installed: $missingList" -ForegroundColor Yellow
+
+        $query   = "Install $missingList from the PowerShell Gallery (scope: $Scope)?"
+        $caption = 'Install required modules'
+
+        try
+        {
+            $approved = $PSCmdlet.ShouldContinue($query, $caption)
+        }
+        catch
+        {
+            # Non-interactive hosts cannot prompt.
+            throw "Required module(s) not installed: $missingList, and this session cannot prompt for confirmation. Install with: $installHint"
+        }
+
+        if (-not $approved)
+        {
+            throw "Required module(s) not installed: $missingList. Install with: $installHint"
+        }
     }
 
     # Windows PowerShell 5.1 may default to TLS 1.0/1.1, which the PowerShell Gallery rejects.
@@ -100,7 +136,7 @@ function Assert-Module
                 throw 'Install-Module completed but the module is still not available.'
             }
 
-            Write-Verbose "Installed module '$module'."
+            Write-Host "Installed module '$module'." -ForegroundColor Green
         }
         catch
         {

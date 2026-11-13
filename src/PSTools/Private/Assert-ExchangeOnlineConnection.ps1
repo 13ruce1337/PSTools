@@ -5,6 +5,9 @@ function Assert-ExchangeOnlineConnection
         Ensures an active Exchange Online session exists, connecting if needed.
 
     .DESCRIPTION
+        If the ExchangeOnlineManagement module is not installed, you are asked
+        whether to install it (see Assert-Module).
+
         Reuses an existing Exchange Online session if one is connected, otherwise
         calls Connect-ExchangeOnline. The signed-in account is always displayed so
         it is clear which identity (and tenant) commands will run as.
@@ -25,10 +28,8 @@ function Assert-ExchangeOnlineConnection
         [string]$UserPrincipalName
     )
 
-    if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement))
-    {
-        throw "The ExchangeOnlineManagement module is not installed. Install it with: Install-Module ExchangeOnlineManagement -Scope CurrentUser"
-    }
+    # Offers to install the module if it is missing; throws if declined or the install fails.
+    Assert-Module -Name ExchangeOnlineManagement
 
     if (-not (Get-Module -Name ExchangeOnlineManagement))
     {
