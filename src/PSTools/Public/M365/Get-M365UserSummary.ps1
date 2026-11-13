@@ -219,9 +219,23 @@ function Get-M365UserSummary {
             'Type'
         )
 
+        $permissionSortProperties = @(
+            'User'
+            'Permission'
+        )
+
         $permissionTableProperties = @(
             'User'
             'Permission'
+        )
+
+        $deviceProperties = @(
+            'FriendlyName'
+            'DeviceModel'
+            'DeviceOS'
+            'DeviceType'
+            'FirstSyncTime'
+            'DeviceAccessState'
         )
 
         $deviceTableProperties = @(
@@ -594,7 +608,7 @@ function Get-M365UserSummary {
                         })
                     }
 
-                    $mailboxPermissions = @($permissionList | Sort-Object -Property User, Permission)
+                    $mailboxPermissions = @($permissionList | Sort-Object -Property $permissionSortProperties)
 
                     if ($mailboxPermissions.Count -gt 0) {
                         $mailboxPermissions | Format-Table -Property $permissionTableProperties -AutoSize | Out-Host
@@ -640,7 +654,7 @@ function Get-M365UserSummary {
                     Write-Section 'Mobile Devices'
                     try {
                         $mobileDevices = @(Get-MobileDevice -Mailbox $address -ErrorAction Stop |
-                            Select-Object -Property FriendlyName, DeviceModel, DeviceOS, DeviceType, FirstSyncTime, DeviceAccessState)
+                            Select-Object -Property $deviceProperties)
 
                         if ($mobileDevices.Count -gt 0) {
                             $mobileDevices | Format-Table -Property $deviceTableProperties -AutoSize | Out-Host
