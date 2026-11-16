@@ -38,6 +38,7 @@
         'Get-M365AdminMfaReport'
         'Get-M365GroupMember'
         'Get-M365MailboxSpaceReport'
+        'Get-M365PasswordLastSet'
         'Get-M365Room'
         'Get-M365RoomList'
         'Get-M365UserSummary'
@@ -51,7 +52,7 @@
 
     PrivateData           = @{
         PSData = @{
-            Tags         = @('IT', 'Admin', 'HyperV', 'Debian', 'Automation', 'M365', 'ExchangeOnline', 'EntraID', 'MFA', 'Groups', 'DiskUsage', 'Storage', 'Meraki', 'Networking', 'ActiveDirectory')
+            Tags         = @('IT', 'Admin', 'HyperV', 'Debian', 'Automation', 'M365', 'ExchangeOnline', 'EntraID', 'MFA', 'Groups', 'DiskUsage', 'Storage', 'Meraki', 'Networking', 'ActiveDirectory', 'Password')
             ProjectUri   = 'https://github.com/13ruce1337/PSTools'
             ReleaseNotes = 'See https://github.com/13ruce1337/PSTools/blob/main/CHANGELOG.md'
         }

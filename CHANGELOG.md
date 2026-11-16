@@ -11,6 +11,12 @@ Individual functions are not versioned separately.
 ## [Unreleased]
 
 ### Added
+- M365: `Get-M365PasswordLastSet` - lists when users last changed their password
+  (email, name, UPN, password last set, password age in days, account enabled).
+  Reports every user by default or only the users given with `-Identity`
+  (UPN, object ID or email address/alias; accepts pipeline input). Results go
+  to the console/pipeline; `-Export` also writes a CSV to `-OutputPath`.
+  Reuses an existing Microsoft Graph session (`User.Read.All`).
 - M365: `Get-M365UserSummary` - admin-center style overview of a user: account
   status, password last set, sign-in activity, authentication methods, licenses,
   groups and roles, mailbox details, mailbox delegates (FullAccess / SendAs /

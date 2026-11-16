@@ -128,9 +128,9 @@ New-DebianVM -Name web01 -CpuCount 2 -MemoryGB 4 -DiskGB 40 -RootPassword $pw
 Cutting a release:
 
 ```powershell
-Update-ModuleManifest -Path .\src\PSTools\PSTools.psd1 -ModuleVersion 0.8.0
-# Move the [Unreleased] entries in CHANGELOG.md under a new [0.8.0] heading, then:
-git commit -am "Release 0.8.0"
-git tag v0.8.0
+Update-ModuleManifest -Path .\src\PSTools\PSTools.psd1 -ModuleVersion 0.7.0
+# Move the [Unreleased] entries in CHANGELOG.md under a new [0.7.0] heading, then:
+git commit -am "Release 0.7.0"
+git tag v0.7.0
 git push --follow-tags
 ```
