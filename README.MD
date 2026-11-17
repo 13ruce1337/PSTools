@@ -129,13 +129,13 @@ New-DebianVM -Name web01 -CpuCount 2 -MemoryGB 4 -DiskGB 40 -RootPassword $pw
 
 1. Create a file named after the function (for example `Get-Thing.ps1`) in the appropriate `Public\<Area>\` folder. The file must contain only the function definition, because any top-level code runs at import time.
 2. Add the function name to `FunctionsToExport` in `PSTools.psd1`.
-3. Add an entry under `[Unreleased]` in `CHANGELOG.md`.
+3. Add an entry to `CHANGELOG.md` under the heading for the current version (the `ModuleVersion` in `PSTools.psd1`).
 
 Cutting a release:
 
 ```powershell
 Update-ModuleManifest -Path .\src\PSTools\PSTools.psd1 -ModuleVersion 0.7.0
-# Move the [Unreleased] entries in CHANGELOG.md under a new [0.7.0] heading, then:
+# Add a [0.7.0] heading to CHANGELOG.md; record changes made from now on under it. Then:
 git commit -am "Release 0.7.0"
 git tag v0.7.0
 git push --follow-tags
