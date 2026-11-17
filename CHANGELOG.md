@@ -1,46 +1,13 @@
 # Changelog
 
-All notable changes to this project are documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-The module version is defined only in `src/PSTools/PSTools.psd1` (`ModuleVersion`).
-Individual functions are not versioned separately.
-
-## [Unreleased]
-
-### Added
-- M365: `Get-M365PasswordLastSet` - lists when users last changed their password
-  (email, name, UPN, password last set, password age in days, account enabled).
-  Reports every user by default or only the users given with `-Identity`
-  (UPN, object ID or email address/alias; accepts pipeline input). Results go
-  to the console/pipeline; `-Export` also writes a CSV to `-OutputPath`.
-  Reuses an existing Microsoft Graph session (`User.Read.All`).
-- M365: `Get-M365UserSummary` - admin-center style overview of a user: account
-  status, password last set, sign-in activity, authentication methods, licenses,
-  groups and roles, mailbox details, mailbox delegates (FullAccess / SendAs /
-  SendOnBehalf), forwarding, out-of-office and mobile devices.
-
-### Changed
-- Missing modules: instead of failing (Graph / Exchange Online commands) or
-  installing silently (`Disable-M365User`), commands now say which modules are
-  missing and ask whether to install them from the PowerShell Gallery.
-  `Assert-Module` prompts by default and gains `-Force` to install without
-  prompting; `Assert-MgGraphConnection` and `Assert-ExchangeOnlineConnection`
-  now use it instead of throwing.
-
-### Planned
-- Import remaining functions from other repositories.
-- Comment-based help / documentation for every public command.
-- GitHub releases and PowerShell Gallery publishing (target: 1.0.0).
-
 ## [0.6.0]
 
 First tracked version. Earlier per-function version numbers have been retired
 in favor of a single module version. History from those notes is summarized below.
 
 ### Added
+- M365: `Get-M365PasswordLastSet`
+- M365: `Get-M365UserSummary`
 - ActiveDirectory: `Disable-ADUser`.
 - FileSystem: `Get-DiskUsageReport`.
 - HyperV: `New-DebianVM`, `New-WindowsVM`.
@@ -51,6 +18,12 @@ in favor of a single module version. History from those notes is summarized belo
   `Assert-Module`, `Test-IsAdmin`.
 
 ### Changed
+- Missing modules: instead of failing (Graph / Exchange Online commands) or
+  installing silently (`Disable-M365User`), commands now say which modules are
+  missing and ask whether to install them from the PowerShell Gallery.
+  `Assert-Module` prompts by default and gains `-Force` to install without
+  prompting; `Assert-MgGraphConnection` and `Assert-ExchangeOnlineConnection`
+  now use it instead of throwing.
 - Versioning reset to SemVer `0.x` with the manifest as the single source of truth
   (the manifest previously said `2.6.0`).
 - `Disable-ADUser`: split from the original `Disable-User` script into an AD-only
@@ -63,3 +36,6 @@ in favor of a single module version. History from those notes is summarized belo
 
 ### Known issues
 - `Get-MerakiFirmware` uses the deprecated `/networks/{id}/devices` endpoint.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
