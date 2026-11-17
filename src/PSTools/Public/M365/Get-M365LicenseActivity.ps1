@@ -159,16 +159,19 @@ function Get-M365LicenseActivity {
         @{ Expression = { $_.DisplayName }; Ascending = $true }
     )
 
+    # Licenses goes last: it can be very long, and Format-Table drops columns that
+    # do not fit the console width. As the last column it is wrapped instead, so
+    # the sign-in columns are always shown.
     $tableProperties = [System.Collections.Generic.List[object]]::new()
     $tableProperties.Add('DisplayName')
     $tableProperties.Add('UserPrincipalName')
-    $tableProperties.Add('Licenses')
     $tableProperties.Add(@{ Label = 'LastSignIn'; Expression = { if ($_.LastSignIn) { $_.LastSignIn } else { 'Never' } } })
-    $tableProperties.Add(@{ Label = 'Days'; Expression = { $_.DaysSinceLastSignIn }; Alignment = 'Right' })
+    $tableProperties.Add(@{ Label = 'DaysSince'; Expression = { $_.DaysSinceLastSignIn }; Alignment = 'Right' })
     $tableProperties.Add('Status')
     if ($IncludeDisabled) {
         $tableProperties.Add('AccountEnabled')
     }
+    $tableProperties.Add('Licenses')
 
     $doExport = $Export -or $PSBoundParameters.ContainsKey('OutputPath')
 
@@ -283,7 +286,7 @@ function Get-M365LicenseActivity {
     if ($unused.Count -gt 0) {
         $unusedLicenses = ($unused | Measure-Object -Property LicenseCount -Sum).Sum
         Write-Host "=== $($unused.Count) licensed user(s) not actively used, holding $unusedLicenses license(s) ===" -ForegroundColor Yellow
-        $unused | Format-Table -Property $tableProperties.ToArray() -AutoSize | Out-Host
+        $unused | Format-Table -Property $tableProperties.ToArray() -AutoSize -Wrap | Out-Host
     }
     else {
         Write-Host 'No inactive licensed users found.' -ForegroundColor Green
