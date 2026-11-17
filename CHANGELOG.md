@@ -10,8 +10,9 @@ in favor of a single module version. History from those notes is summarized belo
 - FileSystem: `Get-DiskUsageReport`.
 - HyperV: `New-DebianVM`, `New-WindowsVM`.
 - M365: `Disable-M365User`, `Get-M365AdminMfaReport`, `Get-M365GroupMember`,
-  `Get-M365MailboxSpaceReport`, `Get-M365PasswordLastSet`, `Get-M365Room`,
-  `Get-M365RoomList`, `Get-M365UserSummary`.
+  `Get-M365LicenseActivity`, `Get-M365MailboxSpaceReport`,
+  `Get-M365PasswordLastSet`, `Get-M365Room`, `Get-M365RoomList`,
+  `Get-M365UserSummary`.
 - Network: `Get-MerakiFirmware`.
 - Private helpers: `Assert-ExchangeOnlineConnection`, `Assert-MgGraphConnection`,
   `Assert-Module`, `Test-IsAdmin`.

@@ -21,6 +21,7 @@ Each command is a self-contained advanced function with comment-based help. Run 
 | **M365** | `Disable-M365User` | Deprovisions a user in Microsoft 365: sets out-of-office, converts to shared, grants the manager access, removes group/DL memberships, removes mobile devices, and removes licenses. |
 | **M365** | `Get-M365AdminMfaReport` | Reports MFA registration strength for every Entra ID directory role holder, including group-assigned and PIM-eligible roles. |
 | **M365** | `Get-M365GroupMember` | Lists the user members of a group by display name or email, with optional nested membership and CSV export. |
+| **M365** | `Get-M365LicenseActivity` | Shows licensed users who haven't signed in recently (or ever), with their licenses and last sign-in, to find assigned but unused licenses. Optional CSV export of all licensed users. |
 | **M365** | `Get-M365MailboxSpaceReport` | Breaks down mailbox space usage: folders, Recoverable Items, archive, and large sent messages. |
 | **M365** | `Get-M365PasswordLastSet` | Shows the users whose password was set longest ago (top 30 by default, with password age and account status) for all users or specific UPNs/emails, with optional CSV export of the full list. |
 | **M365** | `Get-M365Room` | Lists room mailboxes, optionally filtered by room list. |
@@ -46,7 +47,7 @@ Each command is a self-contained advanced function with comment-based help. Run 
 |---|---|
 | **ActiveDirectory** | RSAT (the `ActiveDirectory` module) |
 | **HyperV** | Elevated session and the Hyper-V PowerShell module. `New-DebianVM` installs QEMU (`qemu-img`) and the Windows ADK Deployment Tools (`oscdimg`) via winget if they are missing. |
-| **M365 (Graph)** | `Microsoft.Graph.Authentication`. `Disable-M365User` also needs `Microsoft.Graph.Users`, `Microsoft.Graph.Users.Actions` and `Microsoft.Graph.Groups`. `Get-M365PasswordLastSet` requests `User.Read.All`. `Get-M365UserSummary` requests `User.Read.All`, `GroupMember.Read.All`, `UserAuthenticationMethod.Read.All` and `AuditLog.Read.All` (sign-in activity also needs Entra ID P1). |
+| **M365 (Graph)** | `Microsoft.Graph.Authentication`. `Disable-M365User` also needs `Microsoft.Graph.Users`, `Microsoft.Graph.Users.Actions` and `Microsoft.Graph.Groups`. `Get-M365LicenseActivity` requests `User.Read.All`, `AuditLog.Read.All` and `Organization.Read.All` (sign-in activity also needs Entra ID P1). `Get-M365PasswordLastSet` requests `User.Read.All`. `Get-M365UserSummary` requests `User.Read.All`, `GroupMember.Read.All`, `UserAuthenticationMethod.Read.All` and `AuditLog.Read.All` (sign-in activity also needs Entra ID P1). |
 | **M365 (Exchange)** | `ExchangeOnlineManagement`. The large-sent-messages section of `Get-M365MailboxSpaceReport` needs version 3.7.0+ (`Get-MessageTraceV2`). |
 | **Network** | A Meraki Dashboard API key |
 
@@ -92,6 +93,12 @@ Get-M365PasswordLastSet -Top 50 -EnabledOnly -OutputPath C:\Reports
 # Active accounts whose password is over a year old
 Get-M365PasswordLastSet -PassThru | Where-Object { $_.IsActive -and $_.PasswordAgeDays -gt 365 } | Format-Table
 
+# Licensed users with no sign-in in the last 30 days
+Get-M365LicenseActivity
+
+# Same with a 90-day threshold, including disabled accounts, exported to C:\Reports
+Get-M365LicenseActivity -DaysInactive 90 -IncludeDisabled -OutputPath C:\Reports
+
 # Group membership, including nested groups, exported to CSV
 Get-M365GroupMember -GroupName 'All Staff' -Transitive -Export
 
@@ -118,7 +125,7 @@ New-DebianVM -Name web01 -CpuCount 2 -MemoryGB 4 -DiskGB 40 -RootPassword $pw
 
 ### Notes
 
-- **Output location:** CSV exports go to `$env:TEMP\PSTools` by default; use `-OutputPath` to change the folder. `Get-M365AdminMfaReport` and `Get-M365MailboxSpaceReport` export by default (use `-NoExport` to skip the CSV). `Get-M365GroupMember` and `Get-M365PasswordLastSet` only write to the console unless `-Export` is specified (for `Get-M365PasswordLastSet`, specifying `-OutputPath` also turns on the export).
+- **Output location:** CSV exports go to `$env:TEMP\PSTools` by default; use `-OutputPath` to change the folder. `Get-M365AdminMfaReport` and `Get-M365MailboxSpaceReport` export by default (use `-NoExport` to skip the CSV). `Get-M365GroupMember`, `Get-M365LicenseActivity` and `Get-M365PasswordLastSet` only write to the console unless `-Export` is specified (for `Get-M365LicenseActivity` and `Get-M365PasswordLastSet`, specifying `-OutputPath` also turns on the export).
 - **`New-WindowsVM`** has no parameters yet. The VM name, ISO path (`C:\ISOs\Win11_Unattended.iso` by default), disk size, CPU count and switch names are set at the top of the function. The VM starts on an isolated private switch, and the summary at the end prints the command to connect it to a real network.
 - **`Get-MerakiFirmware`** writes `Meraki_Firmware_Report.csv` to the current directory and a transcript to `C:\Windows\Temp\get_meraki_firmware.log`. It uses the deprecated `/networks/{id}/devices` endpoint; see [`CHANGELOG.md`](CHANGELOG.md).
 - **Preview mode:** commands that make changes support `-WhatIf` and `-Confirm` where noted in their help.
