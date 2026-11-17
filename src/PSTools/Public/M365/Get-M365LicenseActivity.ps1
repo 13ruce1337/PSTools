@@ -19,11 +19,13 @@ function Get-M365LicenseActivity {
         Disabled accounts are skipped unless -IncludeDisabled is specified.
 
         The console shows a summary by status and a table of the users that look
-        unused (Inactive and NeverSignedIn), longest without a sign-in first.
+        unused (Inactive and NeverSignedIn). The table is sorted by last sign-in:
+        the most recent sign-in is at the top, and the longest time since last
+        sign-in is at the bottom. Users who never signed in are listed last.
 
         Nothing is written to disk unless -Export or -OutputPath is specified.
         When exporting, every licensed user (not only the unused ones) is written
-        to a CSV file in -OutputPath.
+        to a CSV file in -OutputPath, in the same order.
 
         Use -PassThru to also return every record to the pipeline.
 
@@ -153,9 +155,10 @@ function Get-M365LicenseActivity {
         'NeverSignedIn'
     )
 
-    # Longest without a sign-in first; never signed in counts as longest.
+    # Most recent sign-in first, longest without a sign-in last; never signed in
+    # counts as longest, so those users go at the very bottom.
     $sortProperties = @(
-        @{ Expression = { if ($null -eq $_.DaysSinceLastSignIn) { [int]::MaxValue } else { $_.DaysSinceLastSignIn } }; Descending = $true }
+        @{ Expression = { if ($null -eq $_.DaysSinceLastSignIn) { [int]::MaxValue } else { $_.DaysSinceLastSignIn } }; Ascending = $true }
         @{ Expression = { $_.DisplayName }; Ascending = $true }
     )
 
@@ -166,7 +169,6 @@ function Get-M365LicenseActivity {
     $tableProperties.Add('DisplayName')
     $tableProperties.Add('UserPrincipalName')
     $tableProperties.Add(@{ Label = 'LastSignIn'; Expression = { if ($_.LastSignIn) { $_.LastSignIn } else { 'Never' } } })
-    $tableProperties.Add(@{ Label = 'DaysSince'; Expression = { $_.DaysSinceLastSignIn }; Alignment = 'Right' })
     $tableProperties.Add('Status')
     if ($IncludeDisabled) {
         $tableProperties.Add('AccountEnabled')
