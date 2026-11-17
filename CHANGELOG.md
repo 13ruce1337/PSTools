@@ -1,12 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- M365: `Get-M365PasswordLastSet`: shows the users whose password was set
+  longest ago (top 30 by default, oldest first) for all users or specific
+  UPNs/emails. Supports `-EnabledOnly`, `-Top`, `-PassThru`, and CSV export of
+  the full list with `-Export` / `-OutputPath`.
+
 ## [0.6.0]
 
 First tracked version. Earlier per-function version numbers have been retired
 in favor of a single module version. History from those notes is summarized below.
 
 ### Added
-- M365: `Get-M365PasswordLastSet`
 - M365: `Get-M365UserSummary`
 - ActiveDirectory: `Disable-ADUser`.
 - FileSystem: `Get-DiskUsageReport`.
