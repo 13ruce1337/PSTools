@@ -27,12 +27,21 @@ function Assert-ExchangeOnlineConnection
         in RuntimeBroker. To avoid this, WAM is disabled (-DisableWAM) whenever the
         installed module supports it (3.7.2 and later). Use -UseWAM to opt back in.
 
+        In some module combinations (for example when Microsoft.Graph.Authentication's
+        MSAL is loaded first) the interactive sign-in still goes through the broker
+        even with -DisableWAM. If the broker error occurs, the connection is retried
+        once with device code sign-in (Connect-ExchangeOnline -Device), which does
+        not use the broker. You will be shown a code to enter at
+        https://microsoft.com/devicelogin.
+
     .PARAMETER UserPrincipalName
-        Optional UPN to use if a new connection must be established.
+        Optional UPN to use if a new connection must be established. Not used for
+        the device code fallback.
 
     .PARAMETER UseWAM
         Use the Windows Web Account Manager (WAM) broker for sign-in instead of
-        disabling it. Only affects new connections.
+        disabling it. Only affects new connections. Disables the device code
+        fallback.
     #>
     [CmdletBinding()]
     param(
@@ -81,6 +90,14 @@ function Assert-ExchangeOnlineConnection
         return $account
     }
 
+    # True when an error came from the WAM broker (RuntimeBroker) in MSAL.
+    $testBrokerError = {
+        param($ErrorRecord)
+        $details = [string]$ErrorRecord.Exception.ToString()
+        return ($details -match 'RuntimeBroker|BrokerExtension') -or
+               ($ErrorRecord.Exception -is [System.NullReferenceException] -and $details -match 'Microsoft\.Identity\.Client')
+    }
+
     $connection = & $getConnection
 
     if ($connection)
@@ -106,6 +123,7 @@ function Assert-ExchangeOnlineConnection
     # parameter rather than version so this keeps working with future releases.
     $connectCommand     = Get-Command -Name Connect-ExchangeOnline -ErrorAction Stop
     $supportsDisableWam = $connectCommand.Parameters.ContainsKey('DisableWAM')
+    $supportsDevice     = $connectCommand.Parameters.ContainsKey('Device')
 
     if ($supportsDisableWam -and -not $UseWAM)
     {
@@ -127,32 +145,64 @@ function Assert-ExchangeOnlineConnection
     }
     catch
     {
-        $details = [string]$_.Exception.ToString()
-        $isBrokerError = ($details -match 'RuntimeBroker|BrokerExtension') -or
-                         ($_.Exception -is [System.NullReferenceException] -and $details -match 'Microsoft\.Identity\.Client')
+        if (-not (& $testBrokerError $_))
+        {
+            throw
+        }
 
-        if ($isBrokerError)
+        $brokerError = $_
+        $deviceError = $null
+        $connected   = $false
+
+        # Device code sign-in does not go through the interactive (broker) flow.
+        if (-not $UseWAM -and $supportsDevice)
+        {
+            Write-Warning 'Exchange Online sign-in failed in the Windows sign-in broker (WAM). Retrying with device code sign-in.'
+            Write-Verbose "Broker error: $($brokerError.Exception.Message)"
+
+            $deviceParams = @{
+                ShowBanner  = $false
+                ErrorAction = 'Stop'
+                Device      = $true
+            }
+
+            try
+            {
+                Connect-ExchangeOnline @deviceParams
+                $connected = $true
+            }
+            catch
+            {
+                $deviceError = $_
+                Write-Verbose "Device code sign-in failed: $($deviceError.Exception.Message)"
+            }
+        }
+
+        if (-not $connected)
         {
             if ($UseWAM -and $supportsDisableWam)
             {
                 $hint = 'Run the command again without -UseWAM to sign in without the broker.'
             }
-            elseif ($supportsDisableWam)
+            elseif ($deviceError)
             {
-                $hint = 'Sign-in failed even with WAM disabled. Start a new PowerShell session and try again, ' +
-                        'or connect manually first with "Connect-ExchangeOnline -Device" (device code sign-in does not use the broker).'
+                $hint = "Device code sign-in also failed: $($deviceError.Exception.Message) " +
+                        'Device code flow may be blocked by a Conditional Access policy in your tenant. ' +
+                        'Try connecting from Windows PowerShell 5.1 or the classic PowerShell console window instead of Windows Terminal or VS Code.'
+            }
+            elseif (-not $supportsDisableWam)
+            {
+                $hint = 'This version does not support -DisableWAM. Update the module (Update-Module ExchangeOnlineManagement) to 3.7.2 or later ' +
+                        'and start a new PowerShell session.'
             }
             else
             {
-                $hint = 'This version does not support -DisableWAM. Update the module (Update-Module ExchangeOnlineManagement) to 3.7.2 or later ' +
-                        'and start a new PowerShell session. As an immediate workaround, connect manually first with "Connect-ExchangeOnline -Device".'
+                $hint = 'Sign-in failed even with WAM disabled. Start a new PowerShell session and try again.'
             }
 
             $message = "Exchange Online sign-in failed in the Windows sign-in broker (WAM) with ExchangeOnlineManagement $exoVersion. $hint"
-            throw [System.InvalidOperationException]::new($message, $_.Exception)
+            throw [System.InvalidOperationException]::new($message, $brokerError.Exception)
         }
-
-        throw
     }
 
     $connection = & $getConnection
