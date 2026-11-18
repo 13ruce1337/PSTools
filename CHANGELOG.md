@@ -34,6 +34,19 @@ in favor of a single module version. History from those notes is summarized belo
   `Invoke-MgGraphRequest` for user/group lookups (SDK-version independent,
   paged, UPN-encoded); accepts CSV/pipeline input.
 
+### Fixed
+- Microsoft Graph sign-in (`Assert-MgGraphConnection`) no longer fails with a
+  `NullReferenceException` in the Windows Web Account Manager (WAM) broker
+  (`RuntimeBroker`) in hosts such as Windows Terminal, the VS Code terminal, or
+  elevated/remote sessions. WAM is now disabled with
+  `Set-MgGraphOption -DisableLoginByWAM $true` before connecting, when the
+  installed `Microsoft.Graph.Authentication` supports it. A new `-UseWAM` switch
+  leaves the setting unchanged. If sign-in still fails in the broker, a short,
+  actionable error is shown instead of the raw MSAL stack trace.
+  Note: `Set-MgGraphOption` saves this setting to the Graph SDK profile
+  (`~/.mg`), so it also applies to later `Connect-MgGraph` calls outside this
+  module. Run `Set-MgGraphOption -DisableLoginByWAM $false` to re-enable WAM.
+
 ### Known issues
 - `Get-MerakiFirmware` uses the deprecated `/networks/{id}/devices` endpoint.
 
