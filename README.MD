@@ -1,16 +1,22 @@
 # PSTools — PowerShell IT Toolkit
 
-- Microsoft 365 / Exchange Online administration and reporting
-- User deprovisioning in hybrid Active Directory / Entra ID environments
-- Hyper-V VM provisioning
-- Disk usage reporting
-- Meraki firmware inventory
+## Installation
 
-Each command is a self-contained advanced function with comment-based help. Run `Get-Help <Command> -Full` for details and examples.
+Clone the repo and import the module from the manifest:
+
+```powershell
+git clone https://github.com/13ruce1337/PSTools.git
+Import-Module .\PSTools\src\PSTools\PSTools.psd1
+Get-Command -Module PSTools
+```
+
+To make it available in every session, copy `src\PSTools` into a folder on your `$env:PSModulePath`, for example `$HOME\Documents\PowerShell\Modules\PSTools`. Then run `Import-Module PSTools`.
 
 ---
 
 ## Commands
+
+Each command is a self-contained advanced function with comment-based help. Run `Get-Help <Command> -Full` for details and examples.
 
 | Area | Command | Description |
 |---|---|---|
@@ -21,12 +27,12 @@ Each command is a self-contained advanced function with comment-based help. Run 
 | **M365** | `Disable-M365User` | Deprovisions a user in Microsoft 365: sets out-of-office, converts to shared, grants the manager access, removes group/DL memberships, removes mobile devices, and removes licenses. |
 | **M365** | `Get-M365AdminMfaReport` | Reports MFA registration strength for every Entra ID directory role holder, including group-assigned and PIM-eligible roles. |
 | **M365** | `Get-M365GroupMember` | Lists the user members of a group by display name or email, with optional nested membership and CSV export. |
-| **M365** | `Get-M365LicenseActivity` | Shows licensed users who haven't signed in recently (or ever), with their licenses and last sign-in, to find assigned but unused licenses. Optional CSV export of all licensed users. |
+| **M365** | `Get-M365License` | Shows licensed users who haven't signed in recently (or ever), with their licenses and last sign-in, to find assigned but unused licenses. Optional CSV export of all licensed users. |
 | **M365** | `Get-M365MailboxSpaceReport` | Breaks down mailbox space usage: folders, Recoverable Items, archive, and large sent messages. |
 | **M365** | `Get-M365PasswordLastSet` | Shows the users whose password was set longest ago (top 30 by default, with password age and account status) for all users or specific UPNs/emails, with optional CSV export of the full list. |
 | **M365** | `Get-M365Room` | Lists room mailboxes, optionally filtered by room list. |
 | **M365** | `Get-M365RoomList` | Lists room lists (locations/buildings). Pipe the output to `Get-M365Room`. |
-| **M365** | `Get-M365UserSummary` | Admin-center style overview of a user: account status, password last set, sign-ins, MFA methods, licenses, groups/roles, mailbox delegates, forwarding, out-of-office and mobile devices. |
+| **M365** | `Get-M365User` | Admin-center style overview of a user: account status, password last set, sign-ins, MFA methods, licenses, groups/roles, mailbox delegates, forwarding, out-of-office and mobile devices. |
 | **Network** | `Get-MerakiFirmware` | Exports Meraki device firmware versions and the latest available firmware per product type to CSV. |
 
 ---
@@ -51,24 +57,6 @@ Each command is a self-contained advanced function with comment-based help. Run 
 | **M365 (Exchange)** | `ExchangeOnlineManagement`. The large-sent-messages section of `Get-M365MailboxSpaceReport` needs version 3.7.0+ (`Get-MessageTraceV2`). |
 | **Network** | A Meraki Dashboard API key |
 
-If a required Microsoft Graph or Exchange Online module is missing, you are asked whether to install it from the PowerShell Gallery (CurrentUser scope, no elevation needed). If you decline, the command stops and shows the `Install-Module` command to run.
-
-Existing Microsoft Graph and Exchange Online sessions are reused when they have the required scopes. Otherwise you are prompted to sign in. The signed-in account and tenant are always shown before any changes are made.
-
----
-
-## Installation
-
-Clone the repo and import the module from the manifest:
-
-```powershell
-git clone https://github.com/13ruce1337/PSTools.git
-Import-Module .\PSTools\src\PSTools\PSTools.psd1
-
-Get-Command -Module PSTools
-```
-
-To make it available in every session, copy `src\PSTools` into a folder on your `$env:PSModulePath`, for example `$HOME\Documents\PowerShell\Modules\PSTools`. Then run `Import-Module PSTools`.
 
 ---
 
@@ -121,29 +109,4 @@ Import-Csv .\leavers.csv | Disable-ADUser -WhatIf
 # Debian VM on Hyper-V
 $pw = Read-Host -AsSecureString -Prompt 'Root password'
 New-DebianVM -Name web01 -CpuCount 2 -MemoryGB 4 -DiskGB 40 -RootPassword $pw
-```
-
-### Notes
-
-- **Output location:** CSV exports go to `$env:TEMP\PSTools` by default; use `-OutputPath` to change the folder. `Get-M365AdminMfaReport` and `Get-M365MailboxSpaceReport` export by default (use `-NoExport` to skip the CSV). `Get-M365GroupMember`, `Get-M365LicenseActivity` and `Get-M365PasswordLastSet` only write to the console unless `-Export` is specified (for `Get-M365LicenseActivity` and `Get-M365PasswordLastSet`, specifying `-OutputPath` also turns on the export).
-- **`New-WindowsVM`** has no parameters yet. The VM name, ISO path (`C:\ISOs\Win11_Unattended.iso` by default), disk size, CPU count and switch names are set at the top of the function. The VM starts on an isolated private switch, and the summary at the end prints the command to connect it to a real network.
-- **`Get-MerakiFirmware`** writes `Meraki_Firmware_Report.csv` to the current directory and a transcript to `C:\Windows\Temp\get_meraki_firmware.log`. It uses the deprecated `/networks/{id}/devices` endpoint; see [`CHANGELOG.md`](CHANGELOG.md).
-- **Preview mode:** commands that make changes support `-WhatIf` and `-Confirm` where noted in their help.
-
----
-
-## Adding a command
-
-1. Create a file named after the function (for example `Get-Thing.ps1`) in the appropriate `Public\<Area>\` folder. The file must contain only the function definition, because any top-level code runs at import time.
-2. Add the function name to `FunctionsToExport` in `PSTools.psd1`.
-3. Add an entry to `CHANGELOG.md` under the heading for the current version (the `ModuleVersion` in `PSTools.psd1`).
-
-Cutting a release:
-
-```powershell
-Update-ModuleManifest -Path .\src\PSTools\PSTools.psd1 -ModuleVersion 0.7.0
-# Add a [0.7.0] heading to CHANGELOG.md; record changes made from now on under it. Then:
-git commit -am "Release 0.7.0"
-git tag v0.7.0
-git push --follow-tags
 ```
