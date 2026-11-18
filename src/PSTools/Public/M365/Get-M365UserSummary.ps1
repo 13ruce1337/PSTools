@@ -74,7 +74,15 @@ function Get-M365UserSummary {
     )
 
     begin {
-        # Graph first so its MSAL assembly is loaded before Exchange Online's.
+        # Exchange Online is connected before Microsoft Graph: once Connect-MgGraph has
+        # signed in interactively, Connect-ExchangeOnline can fail in the WAM broker even
+        # with -DisableWAM. Assert-ExchangeOnlineConnection imports
+        # Microsoft.Graph.Authentication before ExchangeOnlineManagement, so Graph's MSAL
+        # is still the one loaded and the later Graph connection works.
+        if (-not $SkipMailbox) {
+            Assert-ExchangeOnlineConnection
+        }
+
         $graphScopes = @(
             'User.Read.All'
             'GroupMember.Read.All'
@@ -82,10 +90,6 @@ function Get-M365UserSummary {
             'AuditLog.Read.All'
         )
         Assert-MgGraphConnection -Scopes $graphScopes
-
-        if (-not $SkipMailbox) {
-            Assert-ExchangeOnlineConnection
-        }
 
         #----------------------------------------------------------[Inner helpers]----------------------------------------------------------
         # Defined inline so they are not exported as part of the module.

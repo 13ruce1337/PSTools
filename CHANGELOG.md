@@ -51,13 +51,20 @@ in favor of a single module version. History from those notes is summarized belo
   `ExchangeOnlineManagement` supports it (3.7.2 and later), to avoid the same
   WAM broker `NullReferenceException`. A new `-UseWAM` switch opts back into
   broker sign-in. If sign-in still fails in the broker, a short, actionable
-  error is shown instead of the raw MSAL stack trace.
+  error is shown instead of the raw MSAL stack trace, including a specific hint
+  when Microsoft Graph was already connected in the session.
+- `Get-M365UserSummary` now connects to Exchange Online before Microsoft Graph.
+  Once `Connect-MgGraph` has signed in, `Connect-ExchangeOnline` can fail in the
+  WAM broker even with `-DisableWAM` (seen with `ExchangeOnlineManagement`
+  3.10.1). Microsoft.Graph.Authentication is still imported first, so the MSAL
+  assembly conflict with Graph does not return.
 
 ### Known issues
 - `Get-MerakiFirmware` uses the deprecated `/networks/{id}/devices` endpoint.
-- Exchange Online sign-in can still fail in the WAM broker even with
-  `-DisableWAM` (seen with `ExchangeOnlineManagement` 3.10.1 when
-  `Microsoft.Graph.Authentication` is loaded first in the same session).
+- Exchange Online sign-in can still fail in the WAM broker if Microsoft Graph
+  was already connected earlier in the same PowerShell session (for example by
+  running a Graph-only command first). Start a new session, or run
+  `Connect-ExchangeOnline -DisableWAM` before any Microsoft Graph command.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).

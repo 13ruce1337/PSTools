@@ -27,6 +27,11 @@ function Assert-ExchangeOnlineConnection
         in RuntimeBroker. To avoid this, WAM is disabled (-DisableWAM) whenever the
         installed module supports it (3.7.2 and later). Use -UseWAM to opt back in.
 
+        If Connect-MgGraph has already signed in interactively in the same session,
+        Connect-ExchangeOnline can still go through the broker even with -DisableWAM
+        (seen with ExchangeOnlineManagement 3.10.1). Callers that need both services
+        should call this function before Assert-MgGraphConnection.
+
         If sign-in still fails in the broker, a short, actionable error is thrown
         instead of the raw MSAL stack trace. The original exception is kept as the
         inner exception.
@@ -93,6 +98,12 @@ function Assert-ExchangeOnlineConnection
                ($ErrorRecord.Exception -is [System.NullReferenceException] -and $details -match 'Microsoft\.Identity\.Client')
     }
 
+    # True when a Microsoft Graph session is already connected in this PowerShell session.
+    $testGraphConnected = {
+        if (-not (Get-Command -Name Get-MgContext -ErrorAction SilentlyContinue)) { return $false }
+        try { return [bool](Get-MgContext -ErrorAction Stop) } catch { return $false }
+    }
+
     $connection = & $getConnection
 
     if ($connection)
@@ -153,10 +164,15 @@ function Assert-ExchangeOnlineConnection
             $hint = 'This version does not support -DisableWAM. Update the module (Update-Module ExchangeOnlineManagement) to 3.7.2 or later ' +
                     'and start a new PowerShell session.'
         }
+        elseif (& $testGraphConnected)
+        {
+            $hint = 'Sign-in failed even with WAM disabled because Microsoft Graph was already connected in this session, ' +
+                    'which makes Connect-ExchangeOnline use the broker. Open a new PowerShell session and run the command again, ' +
+                    'or run "Connect-ExchangeOnline -DisableWAM" before any Microsoft Graph command.'
+        }
         else
         {
-            $hint = 'Sign-in failed even with WAM disabled. To check whether Microsoft.Graph.Authentication being loaded first is the cause, ' +
-                    'open a new PowerShell session and run "Connect-ExchangeOnline -DisableWAM" before any Microsoft Graph command. ' +
+            $hint = 'Sign-in failed even with WAM disabled. Open a new PowerShell session and try again. ' +
                     'If that also fails, try a classic PowerShell console window instead of Windows Terminal or VS Code.'
         }
 
