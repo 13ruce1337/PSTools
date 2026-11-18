@@ -20,12 +20,25 @@ function Assert-ExchangeOnlineConnection
         function imports Microsoft.Graph.Authentication (if installed) before
         importing ExchangeOnlineManagement.
 
+        From ExchangeOnlineManagement 3.7.0, Connect-ExchangeOnline signs in through
+        the Windows Web Account Manager (WAM) broker by default. In some hosts
+        (Windows Terminal, the VS Code terminal, elevated or remote sessions) the
+        broker cannot obtain a parent window and fails with a NullReferenceException
+        in RuntimeBroker. To avoid this, WAM is disabled (-DisableWAM) whenever the
+        installed module supports it (3.7.2 and later). Use -UseWAM to opt back in.
+
     .PARAMETER UserPrincipalName
         Optional UPN to use if a new connection must be established.
+
+    .PARAMETER UseWAM
+        Use the Windows Web Account Manager (WAM) broker for sign-in instead of
+        disabling it. Only affects new connections.
     #>
     [CmdletBinding()]
     param(
-        [string]$UserPrincipalName
+        [string]$UserPrincipalName,
+
+        [switch]$UseWAM
     )
 
     # Offers to install the module if it is missing; throws if declined or the install fails.
@@ -86,8 +99,61 @@ function Assert-ExchangeOnlineConnection
         $connectParams.UserPrincipalName = $UserPrincipalName
     }
 
-    Write-Verbose 'Connecting to Exchange Online.'
-    Connect-ExchangeOnline @connectParams
+    $exoModule  = Get-Module -Name ExchangeOnlineManagement | Select-Object -First 1
+    $exoVersion = if ($exoModule) { [string]$exoModule.Version } else { 'unknown' }
+
+    # -DisableWAM exists in ExchangeOnlineManagement 3.7.2 and later. Detect it by
+    # parameter rather than version so this keeps working with future releases.
+    $connectCommand     = Get-Command -Name Connect-ExchangeOnline -ErrorAction Stop
+    $supportsDisableWam = $connectCommand.Parameters.ContainsKey('DisableWAM')
+
+    if ($supportsDisableWam -and -not $UseWAM)
+    {
+        $connectParams.DisableWAM = $true
+        Write-Verbose "Connecting to Exchange Online (ExchangeOnlineManagement $exoVersion) with WAM disabled (-DisableWAM)."
+    }
+    elseif ($UseWAM)
+    {
+        Write-Verbose "Connecting to Exchange Online (ExchangeOnlineManagement $exoVersion) using the WAM broker (-UseWAM specified)."
+    }
+    else
+    {
+        Write-Verbose "Connecting to Exchange Online (ExchangeOnlineManagement $exoVersion does not support -DisableWAM)."
+    }
+
+    try
+    {
+        Connect-ExchangeOnline @connectParams
+    }
+    catch
+    {
+        $details = [string]$_.Exception.ToString()
+        $isBrokerError = ($details -match 'RuntimeBroker|BrokerExtension') -or
+                         ($_.Exception -is [System.NullReferenceException] -and $details -match 'Microsoft\.Identity\.Client')
+
+        if ($isBrokerError)
+        {
+            if ($UseWAM -and $supportsDisableWam)
+            {
+                $hint = 'Run the command again without -UseWAM to sign in without the broker.'
+            }
+            elseif ($supportsDisableWam)
+            {
+                $hint = 'Sign-in failed even with WAM disabled. Start a new PowerShell session and try again, ' +
+                        'or connect manually first with "Connect-ExchangeOnline -Device" (device code sign-in does not use the broker).'
+            }
+            else
+            {
+                $hint = 'This version does not support -DisableWAM. Update the module (Update-Module ExchangeOnlineManagement) to 3.7.2 or later ' +
+                        'and start a new PowerShell session. As an immediate workaround, connect manually first with "Connect-ExchangeOnline -Device".'
+            }
+
+            $message = "Exchange Online sign-in failed in the Windows sign-in broker (WAM) with ExchangeOnlineManagement $exoVersion. $hint"
+            throw [System.InvalidOperationException]::new($message, $_.Exception)
+        }
+
+        throw
+    }
 
     $connection = & $getConnection
 
