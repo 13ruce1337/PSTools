@@ -15,6 +15,15 @@ function Assert-MgGraphConnection
         app-only sessions) is always displayed so it is clear which identity
         (and tenant) commands will run as.
 
+        Newer versions of Microsoft.Graph.Authentication sign in through the
+        Windows Web Account Manager (WAM) broker by default. In some hosts
+        (Windows Terminal, the VS Code terminal, elevated or remote sessions) the
+        broker cannot obtain a parent window and fails with a NullReferenceException
+        in RuntimeBroker. To avoid this, WAM is disabled with
+        'Set-MgGraphOption -DisableLoginByWAM $true' before connecting, when the
+        installed module supports it. Note that Set-MgGraphOption persists this
+        setting in the Graph SDK profile. Use -UseWAM to leave the setting alone.
+
         If the connection fails because an incompatible Microsoft.Identity.Client
         (MSAL) assembly was already loaded by another module (typically
         ExchangeOnlineManagement), a descriptive error explaining how to resolve
@@ -22,11 +31,17 @@ function Assert-MgGraphConnection
 
     .PARAMETER Scopes
         Delegated permission scopes that the session must have.
+
+    .PARAMETER UseWAM
+        Do not disable the Windows Web Account Manager (WAM) broker before
+        signing in. Only affects new connections.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string[]]$Scopes
+        [string[]]$Scopes,
+
+        [switch]$UseWAM
     )
 
     # Offers to install the module if it is missing; throws if declined or the install fails.
@@ -81,6 +96,32 @@ function Assert-MgGraphConnection
         Write-Host "Existing Graph session ($(& $describeContext $context)) is missing scopes: $($missing -join ', '). Reconnecting." -ForegroundColor Yellow
     }
 
+    # -DisableLoginByWAM exists on Set-MgGraphOption in versions that use WAM by default.
+    # Detect it by parameter rather than version so this keeps working with future releases.
+    $optionCommand      = Get-Command -Name Set-MgGraphOption -ErrorAction SilentlyContinue
+    $supportsDisableWam = $optionCommand -and $optionCommand.Parameters.ContainsKey('DisableLoginByWAM')
+
+    if ($supportsDisableWam -and -not $UseWAM)
+    {
+        try
+        {
+            Set-MgGraphOption -DisableLoginByWAM $true -ErrorAction Stop
+            Write-Verbose 'Disabled WAM for Microsoft Graph sign-in (Set-MgGraphOption -DisableLoginByWAM $true). This setting persists in the Graph SDK profile.'
+        }
+        catch
+        {
+            Write-Verbose "Could not disable WAM for Microsoft Graph sign-in: $($_.Exception.Message)"
+        }
+    }
+    elseif ($UseWAM)
+    {
+        Write-Verbose 'Leaving the Microsoft Graph WAM setting unchanged (-UseWAM specified).'
+    }
+    else
+    {
+        Write-Verbose 'Installed Microsoft.Graph.Authentication does not support -DisableLoginByWAM; connecting with default settings.'
+    }
+
     Write-Verbose 'Connecting to Microsoft Graph.'
     try
     {
@@ -89,9 +130,35 @@ function Assert-MgGraphConnection
     catch
     {
         $message = [string]$_.Exception.Message
+        $details = [string]$_.Exception.ToString()
+
+        $isBrokerError = ($details -match 'RuntimeBroker|BrokerExtension') -or
+                         ($_.Exception -is [System.NullReferenceException] -and $details -match 'Microsoft\.Identity\.Client')
+
+        if ($isBrokerError)
+        {
+            $graphModule  = Get-Module -Name Microsoft.Graph.Authentication | Select-Object -First 1
+            $graphVersion = if ($graphModule) { [string]$graphModule.Version } else { 'unknown' }
+
+            if ($UseWAM -and $supportsDisableWam)
+            {
+                $hint = 'Run the command again without -UseWAM to sign in without the broker.'
+            }
+            elseif ($supportsDisableWam)
+            {
+                $hint = 'Run "Set-MgGraphOption -DisableLoginByWAM $true", then start a new PowerShell session and try again.'
+            }
+            else
+            {
+                $hint = 'Update the module (Update-Module Microsoft.Graph.Authentication) and start a new PowerShell session.'
+            }
+
+            $brokerMessage = "Microsoft Graph sign-in failed in the Windows sign-in broker (WAM) with Microsoft.Graph.Authentication $graphVersion. $hint"
+            throw [System.InvalidOperationException]::new($brokerMessage, $_.Exception)
+        }
 
         $isMsalConflict = ($message -match 'Method not found') -and
-            ($message -match 'Microsoft\.Identity') 
+            ($message -match 'Microsoft\.Identity')
 
         if (-not $isMsalConflict)
         {
