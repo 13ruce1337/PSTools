@@ -46,19 +46,18 @@ in favor of a single module version. History from those notes is summarized belo
   Note: `Set-MgGraphOption` saves this setting to the Graph SDK profile
   (`~/.mg`), so it also applies to later `Connect-MgGraph` calls outside this
   module. Run `Set-MgGraphOption -DisableLoginByWAM $false` to re-enable WAM.
-- Exchange Online sign-in (`Assert-ExchangeOnlineConnection`) no longer fails
-  with the same WAM broker `NullReferenceException`. `Connect-ExchangeOnline` is
-  now called with `-DisableWAM` when the installed `ExchangeOnlineManagement`
-  supports it (3.7.2 and later). Because some module combinations still use the
-  broker even with `-DisableWAM` (seen with 3.10.1 when Graph's MSAL is loaded
-  first), a broker failure now triggers one automatic retry with device code
-  sign-in (`Connect-ExchangeOnline -Device`), which does not use the broker.
-  A new `-UseWAM` switch opts back into broker sign-in and skips the fallback.
-  If sign-in still fails, a short, actionable error is shown instead of the raw
-  MSAL stack trace.
+- Exchange Online sign-in (`Assert-ExchangeOnlineConnection`) now calls
+  `Connect-ExchangeOnline` with `-DisableWAM` when the installed
+  `ExchangeOnlineManagement` supports it (3.7.2 and later), to avoid the same
+  WAM broker `NullReferenceException`. A new `-UseWAM` switch opts back into
+  broker sign-in. If sign-in still fails in the broker, a short, actionable
+  error is shown instead of the raw MSAL stack trace.
 
 ### Known issues
 - `Get-MerakiFirmware` uses the deprecated `/networks/{id}/devices` endpoint.
+- Exchange Online sign-in can still fail in the WAM broker even with
+  `-DisableWAM` (seen with `ExchangeOnlineManagement` 3.10.1 when
+  `Microsoft.Graph.Authentication` is loaded first in the same session).
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
