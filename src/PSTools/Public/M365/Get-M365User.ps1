@@ -1,4 +1,4 @@
-function Get-M365UserSummary {
+function Get-M365User {
     <#
     .SYNOPSIS
         Shows a brief overview of a Microsoft 365 user, similar to the user page

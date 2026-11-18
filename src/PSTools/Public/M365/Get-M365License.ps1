@@ -1,4 +1,4 @@
-function Get-M365LicenseActivity {
+function Get-M365License {
     <#
     .SYNOPSIS
         Reports the last sign-in of licensed Microsoft 365 users, to find licenses
