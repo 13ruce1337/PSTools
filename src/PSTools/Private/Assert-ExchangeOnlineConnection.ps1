@@ -14,11 +14,12 @@ function Assert-ExchangeOnlineConnection
 
         ExchangeOnlineManagement and Microsoft.Graph.Authentication each ship their
         own Microsoft.Identity.Client (MSAL) assembly, and only the first one loaded
-        into a session is used. Graph typically ships the newer MSAL, which Exchange
-        Online can also use, but not the other way round. To avoid "Method not found
-        ... WithLogging" errors from Connect-MgGraph later in the session, this
-        function imports Microsoft.Graph.Authentication (if installed) before
-        importing ExchangeOnlineManagement.
+        into a session is used. Once Connect-ExchangeOnline has signed in, its MSAL
+        is loaded and a later Connect-MgGraph fails with "Method not found".
+        Callers that need both services should call Assert-MgGraphConnection
+        before this function. As a best effort, this function also imports
+        Microsoft.Graph.Authentication (if installed) before importing
+        ExchangeOnlineManagement.
 
         From ExchangeOnlineManagement 3.7.0, Connect-ExchangeOnline signs in through
         the Windows Web Account Manager (WAM) broker by default. In some hosts
@@ -26,11 +27,6 @@ function Assert-ExchangeOnlineConnection
         broker cannot obtain a parent window and fails with a NullReferenceException
         in RuntimeBroker. To avoid this, WAM is disabled (-DisableWAM) whenever the
         installed module supports it (3.7.2 and later). Use -UseWAM to opt back in.
-
-        If Connect-MgGraph has already signed in interactively in the same session,
-        Connect-ExchangeOnline can still go through the broker even with -DisableWAM
-        (seen with ExchangeOnlineManagement 3.10.1). Callers that need both services
-        should call this function before Assert-MgGraphConnection.
 
         If sign-in still fails in the broker, a short, actionable error is thrown
         instead of the raw MSAL stack trace. The original exception is kept as the
@@ -55,7 +51,7 @@ function Assert-ExchangeOnlineConnection
 
     if (-not (Get-Module -Name ExchangeOnlineManagement))
     {
-        # Load Graph's MSAL first (best effort) so later Graph connections in this session still work.
+        # Load Graph first (best effort) so later Graph connections in this session are less likely to conflict.
         if (-not (Get-Module -Name Microsoft.Graph.Authentication) -and
             (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication))
         {
@@ -96,12 +92,6 @@ function Assert-ExchangeOnlineConnection
         $details = [string]$ErrorRecord.Exception.ToString()
         return ($details -match 'RuntimeBroker|BrokerExtension') -or
                ($ErrorRecord.Exception -is [System.NullReferenceException] -and $details -match 'Microsoft\.Identity\.Client')
-    }
-
-    # True when a Microsoft Graph session is already connected in this PowerShell session.
-    $testGraphConnected = {
-        if (-not (Get-Command -Name Get-MgContext -ErrorAction SilentlyContinue)) { return $false }
-        try { return [bool](Get-MgContext -ErrorAction Stop) } catch { return $false }
     }
 
     $connection = & $getConnection
@@ -163,12 +153,6 @@ function Assert-ExchangeOnlineConnection
         {
             $hint = 'This version does not support -DisableWAM. Update the module (Update-Module ExchangeOnlineManagement) to 3.7.2 or later ' +
                     'and start a new PowerShell session.'
-        }
-        elseif (& $testGraphConnected)
-        {
-            $hint = 'Sign-in failed even with WAM disabled because Microsoft Graph was already connected in this session, ' +
-                    'which makes Connect-ExchangeOnline use the broker. Open a new PowerShell session and run the command again, ' +
-                    'or run "Connect-ExchangeOnline -DisableWAM" before any Microsoft Graph command.'
         }
         else
         {

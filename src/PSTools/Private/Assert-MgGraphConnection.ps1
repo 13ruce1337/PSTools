@@ -24,10 +24,12 @@ function Assert-MgGraphConnection
         installed module supports it. Note that Set-MgGraphOption persists this
         setting in the Graph SDK profile. Use -UseWAM to leave the setting alone.
 
-        If the connection fails because an incompatible Microsoft.Identity.Client
-        (MSAL) assembly was already loaded by another module (typically
-        ExchangeOnlineManagement), a descriptive error explaining how to resolve
-        it is thrown instead of the raw "Method not found" message.
+        Callers that need both Microsoft Graph and Exchange Online should call this
+        function before Assert-ExchangeOnlineConnection: once Exchange Online has
+        signed in, its Microsoft.Identity.Client (MSAL) assembly is loaded and
+        Connect-MgGraph fails with "Method not found". If that happens, a
+        descriptive error explaining how to resolve it is thrown instead of the
+        raw message.
 
     .PARAMETER Scopes
         Delegated permission scopes that the session must have.
@@ -177,18 +179,39 @@ function Assert-MgGraphConnection
         $exoVersion   = if ($exoModule)   { [string]$exoModule.Version }   else { 'not loaded' }
         $msalVersion  = if ($msalVersions.Count -gt 0) { $msalVersions -join ', ' } else { 'unknown' }
 
+        if ($exoModule)
+        {
+            $cause = @(
+                'Connect-MgGraph failed because Exchange Online was used earlier in this PowerShell session, and the Microsoft.Identity.Client (MSAL)'
+                'assembly it loaded is not compatible with Microsoft.Graph.Authentication. .NET cannot unload an assembly once it is loaded.'
+            )
+            $resolve = @(
+                '  1. Open a new PowerShell session and run the command again. PSTools commands connect to Microsoft Graph before Exchange Online.'
+                '  2. If you connect manually, run Connect-MgGraph before Connect-ExchangeOnline.'
+            )
+        }
+        else
+        {
+            $cause = @(
+                'Connect-MgGraph failed because an incompatible Microsoft.Identity.Client (MSAL) assembly is already loaded in this PowerShell session,'
+                'probably by another module. .NET cannot unload an assembly once it is loaded.'
+            )
+            $resolve = @(
+                '  1. Open a new PowerShell session and run the Graph-based command before any other command that signs in to Microsoft 365.'
+                '  2. If it persists, update the modules and restart PowerShell:'
+                '       Update-Module Microsoft.Graph.Authentication'
+            )
+        }
+
         $lines = @(
-            'Connect-MgGraph failed because an incompatible Microsoft.Identity.Client (MSAL) assembly is already loaded in this PowerShell session.'
-            'This usually happens when ExchangeOnlineManagement was loaded before Microsoft.Graph.Authentication; .NET cannot unload the older MSAL.'
+            $cause
             ''
             "  Microsoft.Graph.Authentication : $graphVersion"
             "  ExchangeOnlineManagement       : $exoVersion"
             "  Loaded Microsoft.Identity.Client: $msalVersion"
             ''
             'To resolve:'
-            '  1. Open a new PowerShell session and run the Graph-based command (or Connect-MgGraph) before any Exchange Online command.'
-            '  2. If it persists, update both modules and restart PowerShell:'
-            '       Update-Module Microsoft.Graph.Authentication, ExchangeOnlineManagement'
+            $resolve
             ''
             "Original error: $message"
         )

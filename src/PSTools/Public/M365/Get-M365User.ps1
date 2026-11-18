@@ -39,17 +39,17 @@ function Get-M365User {
         Return a report object in addition to the on-screen report.
 
     .EXAMPLE
-        Get-M365UserSummary -Identity trevor.cooper@contoso.com
+        Get-M365User -Identity trevor.cooper@contoso.com
 
     .EXAMPLE
-        Get-M365UserSummary trevor.cooper@contoso.com -SkipMailbox
+        Get-M365User trevor.cooper@contoso.com -SkipMailbox
 
     .EXAMPLE
-        $summary = Get-M365UserSummary -Identity trevor.cooper@contoso.com -PassThru
+        $summary = Get-M365User -Identity trevor.cooper@contoso.com -PassThru
         $summary.MailboxPermissions
 
     .EXAMPLE
-        'user1@contoso.com', 'user2@contoso.com' | Get-M365UserSummary
+        'user1@contoso.com', 'user2@contoso.com' | Get-M365User
 
     .NOTES
         Requires the Microsoft.Graph.Authentication module and the delegated scopes:
@@ -74,15 +74,10 @@ function Get-M365User {
     )
 
     begin {
-        # Exchange Online is connected before Microsoft Graph: once Connect-MgGraph has
-        # signed in interactively, Connect-ExchangeOnline can fail in the WAM broker even
-        # with -DisableWAM. Assert-ExchangeOnlineConnection imports
-        # Microsoft.Graph.Authentication before ExchangeOnlineManagement, so Graph's MSAL
-        # is still the one loaded and the later Graph connection works.
-        if (-not $SkipMailbox) {
-            Assert-ExchangeOnlineConnection
-        }
-
+        # Microsoft Graph is connected before Exchange Online: once Connect-ExchangeOnline
+        # has signed in, its Microsoft.Identity.Client (MSAL) assembly is loaded and
+        # Connect-MgGraph fails with "Method not found". Assert-MgGraphConnection disables
+        # Graph's WAM broker, so the later Connect-ExchangeOnline -DisableWAM works.
         $graphScopes = @(
             'User.Read.All'
             'GroupMember.Read.All'
@@ -90,6 +85,10 @@ function Get-M365User {
             'AuditLog.Read.All'
         )
         Assert-MgGraphConnection -Scopes $graphScopes
+
+        if (-not $SkipMailbox) {
+            Assert-ExchangeOnlineConnection
+        }
 
         #----------------------------------------------------------[Inner helpers]----------------------------------------------------------
         # Defined inline so they are not exported as part of the module.

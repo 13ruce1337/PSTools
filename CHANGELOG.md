@@ -10,9 +10,9 @@ in favor of a single module version. History from those notes is summarized belo
 - FileSystem: `Get-DiskUsageReport`.
 - HyperV: `New-DebianVM`, `New-WindowsVM`.
 - M365: `Disable-M365User`, `Get-M365AdminMfaReport`, `Get-M365GroupMember`,
-  `Get-M365LicenseActivity`, `Get-M365MailboxSpaceReport`,
+  `Get-M365License`, `Get-M365MailboxSpaceReport`,
   `Get-M365PasswordLastSet`, `Get-M365Room`, `Get-M365RoomList`,
-  `Get-M365UserSummary`.
+  `Get-M365User`.
 - Network: `Get-MerakiFirmware`.
 - Private helpers: `Assert-ExchangeOnlineConnection`, `Assert-MgGraphConnection`,
   `Assert-Module`, `Test-IsAdmin`.
@@ -51,20 +51,21 @@ in favor of a single module version. History from those notes is summarized belo
   `ExchangeOnlineManagement` supports it (3.7.2 and later), to avoid the same
   WAM broker `NullReferenceException`. A new `-UseWAM` switch opts back into
   broker sign-in. If sign-in still fails in the broker, a short, actionable
-  error is shown instead of the raw MSAL stack trace, including a specific hint
-  when Microsoft Graph was already connected in the session.
-- `Get-M365UserSummary` now connects to Exchange Online before Microsoft Graph.
-  Once `Connect-MgGraph` has signed in, `Connect-ExchangeOnline` can fail in the
-  WAM broker even with `-DisableWAM` (seen with `ExchangeOnlineManagement`
-  3.10.1). Microsoft.Graph.Authentication is still imported first, so the MSAL
-  assembly conflict with Graph does not return.
+  error is shown instead of the raw MSAL stack trace.
+- `Get-M365User` connects to Microsoft Graph before Exchange Online, like
+  `Disable-M365User`. Once `Connect-ExchangeOnline` has signed in, its MSAL
+  assembly is loaded and `Connect-MgGraph` fails with
+  `Method not found ... WithLogging` (seen with `Microsoft.Graph.Authentication`
+  2.34.0 and `ExchangeOnlineManagement` 3.10.1).
+- The MSAL-conflict error from `Assert-MgGraphConnection` now says when Exchange
+  Online caused it and no longer suggests a connection order that fails.
 
 ### Known issues
 - `Get-MerakiFirmware` uses the deprecated `/networks/{id}/devices` endpoint.
-- Exchange Online sign-in can still fail in the WAM broker if Microsoft Graph
-  was already connected earlier in the same PowerShell session (for example by
-  running a Graph-only command first). Start a new session, or run
-  `Connect-ExchangeOnline -DisableWAM` before any Microsoft Graph command.
+- Microsoft Graph sign-in fails with `Method not found` if Exchange Online was
+  connected earlier in the same PowerShell session (for example by running
+  `Get-M365MailboxSpaceReport` or `Get-M365Room` first). Open a new session, or
+  run `Connect-MgGraph` before any Exchange Online command.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
