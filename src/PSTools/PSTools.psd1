@@ -37,7 +37,7 @@
         'Disable-M365User'
         'Get-M365AdminMfaReport'
         'Get-M365GroupMember'
-        'Get-M365LicenseActivity'
+        'Get-M365License'
         'Get-M365MailboxSpaceReport'
         'Get-M365PasswordLastSet'
         'Get-M365Room'
