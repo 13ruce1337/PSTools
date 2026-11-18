@@ -42,7 +42,7 @@
         'Get-M365PasswordLastSet'
         'Get-M365Room'
         'Get-M365RoomList'
-        'Get-M365UserSummary'
+        'Get-M365User'
 
         # Network
         'Get-MerakiFirmware'
