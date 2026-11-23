@@ -8,9 +8,12 @@
   the device from Windows Autopilot, and `-IncludeEntra` also deletes the Entra
   ID device (and implies `-IncludeAutopilot`). Records are removed in the order
   Microsoft recommends (Intune, Autopilot, Entra ID); the Entra step only runs
-  once the Autopilot identity is confirmed gone. Accepts a CSV (`-CsvPath`) or
-  pipeline input for batches, supports `-WhatIf` / `-Confirm` / `-Force`, skips
-  synced (hybrid joined) Entra devices, and outputs a result object per device.
+  once the Autopilot identity is confirmed gone. `-TimeoutSeconds` (default
+  600) is one shared limit for the whole run's Autopilot wait, whether one
+  device or a batch, and covers retrying deletes Autopilot has not accepted yet.
+  Accepts a CSV (`-CsvPath`) or pipeline input for batches, supports `-WhatIf` /
+  `-Confirm` / `-Force`, skips synced (hybrid joined) Entra devices, and outputs
+  a result object per device.
 
 ## [0.6.0]
 

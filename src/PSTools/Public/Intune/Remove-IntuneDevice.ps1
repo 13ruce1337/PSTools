@@ -18,7 +18,8 @@ function Remove-IntuneDevice
         starts once the Autopilot identity is confirmed to be gone. Autopilot
         deletion is asynchronous, so the command polls until the identity
         disappears or -TimeoutSeconds is reached. If a step fails, is declined,
-        or times out, the later steps are skipped for that device.
+        or times out, the later steps are skipped for that device. Running the
+        command again later finishes the remaining steps.
 
         -Hostname is an optional safety check. If the serial number has Intune
         records but none of them have that device name, the device is skipped.
@@ -32,8 +33,9 @@ function Remove-IntuneDevice
         them from on-premises Active Directory instead.
 
         Batches (CSV or pipeline input) are processed in phases: every Intune
-        deletion, then every Autopilot deletion, then one shared wait, then every
-        Entra deletion. You wait once for the whole batch, not once per device.
+        deletion, then every Autopilot deletion request, then one shared wait,
+        then every Entra deletion. You wait once for the whole batch, not once
+        per device.
 
         Requested Microsoft Graph scopes:
           DeviceManagementManagedDevices.ReadWrite.All   (always)
@@ -60,9 +62,15 @@ function Remove-IntuneDevice
         deletion only runs after the Autopilot identity is confirmed removed.
 
     .PARAMETER TimeoutSeconds
-        How long to wait for Autopilot deletions to complete (and to retry
-        Autopilot deletion while a just-deleted Intune record is still being
-        processed). Default 600.
+        Maximum total time, in seconds, to wait for Autopilot deletions. This is
+        one shared limit for the whole run (a single device or an entire batch),
+        not a per-device limit. It covers both retrying deletes that Autopilot
+        rejects while a just-deleted Intune record is still being processed, and
+        waiting for accepted deletes to disappear. Waiting stops as soon as every
+        identity is gone. Default 600 (10 minutes). Autopilot deletion usually
+        completes within a few minutes but can take longer; anything still
+        pending is reported as TimedOut and can be finished by running the
+        command again.
 
     .PARAMETER PollIntervalSeconds
         Delay between Autopilot status checks / retries. Default 15.
@@ -93,9 +101,10 @@ function Remove-IntuneDevice
         Entra device.
 
     .EXAMPLE
-        Remove-IntuneDevice -CsvPath .\retired.csv -IncludeEntra -Force | Export-Csv .\retired-results.csv -NoTypeInformation
+        Remove-IntuneDevice -CsvPath .\retired.csv -IncludeEntra -Force -TimeoutSeconds 1800 | Export-Csv .\retired-results.csv -NoTypeInformation
 
-        Batch removal from a CSV without prompting, saving the results.
+        Batch removal from a CSV without prompting, allowing up to 30 minutes in
+        total for Autopilot deletions, and saving the results.
 
     .EXAMPLE
         Import-Csv .\retired.csv | Remove-IntuneDevice -IncludeAutopilot
@@ -124,7 +133,7 @@ function Remove-IntuneDevice
 
         [switch]$IncludeEntra,
 
-        [ValidateRange(30, 3600)]
+        [ValidateRange(30, 7200)]
         [int]$TimeoutSeconds = 600,
 
         [ValidateRange(5, 300)]
@@ -461,12 +470,41 @@ function Remove-IntuneDevice
 
         #endregion
 
-        #region Phase 3 + 4: Autopilot (delete, then wait until gone)
+        #region Phase 3 + 4: Autopilot (request deletes, then one shared wait / retry loop)
 
         if ($doAutopilot)
         {
-            $pending = [System.Collections.Generic.List[object]]::new()
+            # Deletion accepted; waiting for the identity to disappear.
+            $pending  = [System.Collections.Generic.List[object]]::new()
+            # Deletion rejected for now (Intune still releasing the device); retried in the wait loop.
+            $retrying = [System.Collections.Generic.List[object]]::new()
 
+            # Sends one DELETE. Returns 'Requested', 'Gone', 'Retry' or 'Failed'.
+            $requestDelete = {
+                param($Item)
+                try
+                {
+                    Invoke-MgGraphRequest -Method DELETE -Uri "$baseUri/deviceManagement/windowsAutopilotDeviceIdentities/$($Item.Id)" -ErrorAction Stop | Out-Null
+                    Write-Verbose "Requested deletion of $($Item.Target)."
+                    return 'Requested'
+                }
+                catch
+                {
+                    if (& $isNotFound $_) { return 'Gone' }
+
+                    $Item.LastError = [string]$_.Exception.Message
+                    if ($Item.CanRetry)
+                    {
+                        Write-Verbose "Autopilot delete for $($Item.Record.SerialNumber) not accepted yet ($($Item.LastError)); will retry."
+                        return 'Retry'
+                    }
+
+                    & $addNote $Item.Record "Autopilot delete failed: $($Item.LastError)" -Warn
+                    return 'Failed'
+                }
+            }
+
+            # First pass: prompt and request every deletion without blocking on any device.
             foreach ($record in $records)
             {
                 if ($record.AutopilotStatus -ne 'Queued') { continue }
@@ -479,10 +517,6 @@ function Remove-IntuneDevice
                     continue
                 }
 
-                # Retry only when an Intune record was just deleted; Autopilot may reject
-                # the deletion until Intune finishes processing it.
-                $retry = $record.Counts.Intune.Removed -gt 0
-
                 foreach ($identity in $record.AutopilotDevices)
                 {
                     $target = "Autopilot device (serial $($record.SerialNumber), model $($identity['model']), id $($identity['id']))"
@@ -492,49 +526,54 @@ function Remove-IntuneDevice
                         continue
                     }
 
-                    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-                    $done     = $false
-                    while (-not $done)
+                    $item = @{
+                        Record    = $record
+                        Id        = [string]$identity['id']
+                        Target    = $target
+                        # Retry only when an Intune record was just deleted; Autopilot may reject
+                        # the deletion until Intune finishes processing it.
+                        CanRetry  = $record.Counts.Intune.Removed -gt 0
+                        LastError = ''
+                    }
+
+                    switch (& $requestDelete $item)
                     {
-                        try
-                        {
-                            Invoke-MgGraphRequest -Method DELETE -Uri "$baseUri/deviceManagement/windowsAutopilotDeviceIdentities/$($identity['id'])" -ErrorAction Stop | Out-Null
-                            Write-Verbose "Requested deletion of $target."
-                            $pending.Add(@{ Record = $record; Id = [string]$identity['id'] })
-                            $done = $true
-                        }
-                        catch
-                        {
-                            if (& $isNotFound $_)
-                            {
-                                $count.Removed++
-                                $done = $true
-                            }
-                            elseif (-not $retry -or (Get-Date) -ge $deadline)
-                            {
-                                $count.Failed++
-                                & $addNote $record "Autopilot delete failed: $($_.Exception.Message)" -Warn
-                                $done = $true
-                            }
-                            else
-                            {
-                                Write-Verbose "Autopilot delete for $($record.SerialNumber) not accepted yet ($($_.Exception.Message)); retrying in $PollIntervalSeconds s."
-                                Write-Progress -Activity $activity -Status "Waiting for Intune to release $($record.SerialNumber) before Autopilot removal"
-                                Start-Sleep -Seconds $PollIntervalSeconds
-                            }
-                        }
+                        'Requested' { $pending.Add($item) }
+                        'Gone'      { $count.Removed++ }
+                        'Retry'     { $retrying.Add($item) }
+                        'Failed'    { $count.Failed++ }
                     }
                 }
             }
 
-            if ($pending.Count -gt 0)
+            $total = $pending.Count + $retrying.Count
+            if ($total -gt 0)
             {
-                Write-Host "Waiting for $($pending.Count) Autopilot deletion(s) to complete (timeout $TimeoutSeconds s)..." -ForegroundColor DarkCyan
+                Write-Host "Waiting for $total Autopilot deletion(s) to complete (up to $TimeoutSeconds s in total)..." -ForegroundColor DarkCyan
                 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-                $total    = $pending.Count
 
-                while ($pending.Count -gt 0)
+                while ($true)
                 {
+                    # Retry deletes that were not accepted yet.
+                    foreach ($item in @($retrying))
+                    {
+                        $result = & $requestDelete $item
+                        switch ($result)
+                        {
+                            'Requested'
+                            {
+                                [void]$retrying.Remove($item)
+                                $pending.Add($item)
+                            }
+                            'Gone'
+                            {
+                                [void]$retrying.Remove($item)
+                                $item.Record.Counts.Autopilot.Removed++
+                            }
+                        }
+                    }
+
+                    # Check whether accepted deletes have completed.
                     foreach ($item in @($pending))
                     {
                         try
@@ -555,12 +594,19 @@ function Remove-IntuneDevice
                         }
                     }
 
-                    if ($pending.Count -eq 0 -or (Get-Date) -ge $deadline) { break }
+                    if (($pending.Count + $retrying.Count) -eq 0 -or (Get-Date) -ge $deadline) { break }
 
-                    $doneCount = $total - $pending.Count
-                    Write-Progress -Activity $activity -Status "Autopilot deletions confirmed: $doneCount of $total" `
+                    $doneCount = $total - $pending.Count - $retrying.Count
+                    $remaining = [int][math]::Max(0, ($deadline - (Get-Date)).TotalSeconds)
+                    Write-Progress -Activity $activity -Status "Autopilot deletions confirmed: $doneCount of $total (up to $remaining s left)" `
                         -PercentComplete ([int](($doneCount / $total) * 100))
                     Start-Sleep -Seconds $PollIntervalSeconds
+                }
+
+                foreach ($item in $retrying)
+                {
+                    $item.Record.Counts.Autopilot.TimedOut++
+                    & $addNote $item.Record "Autopilot did not accept the deletion within $TimeoutSeconds s (last error: $($item.LastError)). Run again later to finish." -Warn
                 }
 
                 foreach ($item in $pending)
