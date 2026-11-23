@@ -5,14 +5,14 @@
     # the module version is defined; do not add per-function version notes.
     # Pre-1.0: bump MINOR for new commands / breaking changes, PATCH for fixes.
     # Record every change in CHANGELOG.md and tag releases as vX.Y.Z.
-    ModuleVersion         = '0.6.0'
+    ModuleVersion         = '0.7.0'
 
     GUID                  = 'b7c1f6a2-3d54-4e8f-9a1b-6c2e0d7f4a93'
 
     Author                = 'Trevor Cooper'
     CompanyName           = 'Community'
     Copyright             = '(c) Trevor Cooper. All rights reserved.'
-    Description           = 'PowerShell IT toolkit: Hyper-V provisioning, Microsoft 365 administration, user deprovisioning, disk usage reporting and more.'
+    Description           = 'PowerShell IT toolkit: Hyper-V provisioning, Microsoft 365 administration, Intune device cleanup, user deprovisioning, disk usage reporting and more.'
 
     PowerShellVersion     = '5.1'
     CompatiblePSEditions  = @('Desktop', 'Core')
@@ -32,6 +32,9 @@
         # HyperV
         'New-DebianVM'
         'New-WindowsVM'
+
+        # Intune
+        'Remove-IntuneDevice'
 
         # M365
         'Disable-M365User'
@@ -53,7 +56,7 @@
 
     PrivateData           = @{
         PSData = @{
-            Tags         = @('IT', 'Admin', 'HyperV', 'Debian', 'Automation', 'M365', 'ExchangeOnline', 'EntraID', 'MFA', 'Groups', 'DiskUsage', 'Storage', 'Meraki', 'Networking', 'ActiveDirectory', 'Password', 'Licensing')
+            Tags         = @('IT', 'Admin', 'HyperV', 'Debian', 'Automation', 'M365', 'ExchangeOnline', 'EntraID', 'MFA', 'Groups', 'DiskUsage', 'Storage', 'Meraki', 'Networking', 'ActiveDirectory', 'Password', 'Licensing', 'Intune', 'Autopilot')
             ProjectUri   = 'https://github.com/13ruce1337/PSTools'
             ReleaseNotes = 'See https://github.com/13ruce1337/PSTools/blob/main/CHANGELOG.md'
         }

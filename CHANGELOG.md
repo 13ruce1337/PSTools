@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0]
+
+### Added
+- Intune: `Remove-IntuneDevice`. Removes devices from Intune by serial number,
+  with an optional hostname safety check. `-IncludeAutopilot` also deregisters
+  the device from Windows Autopilot, and `-IncludeEntra` also deletes the Entra
+  ID device (and implies `-IncludeAutopilot`). Records are removed in the order
+  Microsoft recommends (Intune, Autopilot, Entra ID); the Entra step only runs
+  once the Autopilot identity is confirmed gone. Accepts a CSV (`-CsvPath`) or
+  pipeline input for batches, supports `-WhatIf` / `-Confirm` / `-Force`, skips
+  synced (hybrid joined) Entra devices, and outputs a result object per device.
+
 ## [0.6.0]
 
 First tracked version. Earlier per-function version numbers have been retired
