@@ -16,31 +16,89 @@ To make it available in every session, copy `src\PSTools` into a folder on your 
 
 ## Commands
 
-Each command is a self-contained advanced function with comment-based help. Run `Get-Help <Command> -Full` for details and examples.
+Each command is a self-contained advanced function with comment-based help. The descriptions below are summaries. Run `Get-Help <Command> -Full` for parameters, details and examples.
 
-| Area | Command | Description |
-|---|---|---|
-| **ActiveDirectory** | `Disable-ADUser` | Disables an on-prem AD account, stamps the description, removes group memberships, and optionally resets the password, hides it from address lists, and moves it to another OU. |
-| **FileSystem** | `Get-DiskUsageReport` | Shows the largest folders (recursive totals) and largest files under a path. |
-| **HyperV** | `New-DebianVM` | Creates a Gen 2 Debian VM from the Debian cloud image with a cloud-init seed (hostname, root password, packages). |
-| **HyperV** | `New-WindowsVM` | Creates a Gen 2 Windows 11 reference VM (vTPM, Secure Boot, no checkpoints) on an isolated switch and boots it from an ISO. |
-| **Intune** | `Remove-IntuneDevice` | Removes devices from Intune by serial number (with an optional hostname check), and optionally from Windows Autopilot and Entra ID in the correct order (Intune, Autopilot, Entra). Accepts a CSV for batches and supports `-WhatIf`. |
-| **M365** | `Disable-M365User` | Deprovisions a user in Microsoft 365: sets out-of-office, converts to shared, grants the manager access, removes group/DL memberships, removes mobile devices, and removes licenses. |
-| **M365** | `Get-M365AdminMfaReport` | Reports MFA registration strength for every Entra ID directory role holder, including group-assigned and PIM-eligible roles. |
-| **M365** | `Get-M365GroupMember` | Lists the user members of a group by display name or email, with optional nested membership and CSV export. |
-| **M365** | `Get-M365License` | Shows licensed users who haven't signed in recently (or ever), with their licenses and last sign-in, to find assigned but unused licenses. Optional CSV export of all licensed users. |
-| **M365** | `Get-M365MailboxSpaceReport` | Breaks down mailbox space usage: folders, Recoverable Items, archive, and large sent messages. |
-| **M365** | `Get-M365PasswordLastSet` | Shows the users whose password was set longest ago (top 30 by default, with password age and account status) for all users or specific UPNs/emails, with optional CSV export of the full list. |
-| **M365** | `Get-M365Room` | Lists room mailboxes, optionally filtered by room list. |
-| **M365** | `Get-M365RoomList` | Lists room lists (locations/buildings). Pipe the output to `Get-M365Room`. |
-| **M365** | `Get-M365User` | Admin-center style overview of a user: account status, password last set, sign-ins, MFA methods, licenses, groups/roles, mailbox delegates, forwarding, out-of-office and mobile devices. |
-| **Network** | `Get-MerakiFirmware` | Exports Meraki device firmware versions and the latest available firmware per product type to CSV. |
+**Areas:** [Active Directory](#active-directory) · [File System](#file-system) · [Hyper-V](#hyper-v) · [Intune](#intune) · [Microsoft 365](#microsoft-365) · [Network](#network)
+
+### Active Directory
+
+| Command | Description |
+|---|---|
+| `Disable-ADUser` | Disables an on-prem AD account, stamps the description and removes group memberships. Can also reset the password, hide the account from address lists and move it to another OU. |
+
+**Requires:** RSAT (the `ActiveDirectory` module).
+
+### File System
+
+| Command | Description |
+|---|---|
+| `Get-DiskUsageReport` | Shows the largest folders (recursive totals) and largest files under a path. |
+
+### Hyper-V
+
+| Command | Description |
+|---|---|
+| `New-DebianVM` | Creates a Gen 2 Debian VM from the Debian cloud image with a cloud-init seed (hostname, root password, packages). |
+| `New-WindowsVM` | Creates a Gen 2 Windows 11 reference VM (vTPM, Secure Boot, no checkpoints) on an isolated switch and boots it from an ISO. |
+
+**Requires:** an elevated session and the Hyper-V PowerShell module. `New-DebianVM` installs QEMU (`qemu-img`) and the Windows ADK Deployment Tools (`oscdimg`) via winget if they are missing.
+
+### Intune
+
+| Command | Description |
+|---|---|
+| `Remove-IntuneDevice` | Removes devices from Intune by serial number, with an optional hostname check. Can also remove them from Windows Autopilot and Entra ID in the recommended order (Intune, Autopilot, Entra ID). Accepts CSV or pipeline input and supports `-WhatIf`. |
+
+**Requires:** `Microsoft.Graph.Authentication`. Requests `DeviceManagementManagedDevices.ReadWrite.All`, plus `DeviceManagementServiceConfig.ReadWrite.All` for Autopilot and `Device.ReadWrite.All` for Entra ID. The signed-in account needs a role that can delete these records (for example Intune Administrator).
+
+### Microsoft 365
+
+**Users**
+
+| Command | Description |
+|---|---|
+| `Get-M365User` | Admin-center style overview of a user: account, password, sign-ins, MFA, licenses, groups/roles, mailbox delegates, forwarding, out-of-office and mobile devices. |
+| `Disable-M365User` | Deprovisions a user: sets out-of-office, converts the mailbox to shared, grants the manager access, removes group/DL memberships and mobile devices, and removes licenses. |
+
+**Groups & rooms**
+
+| Command | Description |
+|---|---|
+| `Get-M365GroupMember` | Lists the user members of a group by display name or email. Supports nested membership and CSV export. |
+| `Get-M365RoomList` | Lists room lists (locations/buildings). Pipe the output to `Get-M365Room`. |
+| `Get-M365Room` | Lists room mailboxes, optionally filtered by room list. |
+
+**Reports**
+
+| Command | Description |
+|---|---|
+| `Get-M365AdminMfaReport` | MFA registration strength for every Entra ID directory role holder, including group-assigned and PIM-eligible roles. |
+| `Get-M365License` | Licensed users who haven't signed in recently (or ever), to find assigned but unused licenses. |
+| `Get-M365PasswordLastSet` | Users whose password was set longest ago, with password age and account status. |
+| `Get-M365MailboxSpaceReport` | Breaks down mailbox space: folders, Recoverable Items, archive and large sent messages. |
+
+**Requires:**
+
+- **Graph commands:** `Microsoft.Graph.Authentication`.
+  - `Disable-M365User` also needs `Microsoft.Graph.Users`, `Microsoft.Graph.Users.Actions` and `Microsoft.Graph.Groups`.
+  - `Get-M365LicenseActivity` requests `User.Read.All`, `AuditLog.Read.All` and `Organization.Read.All`. Sign-in activity also needs Entra ID P1.
+  - `Get-M365PasswordLastSet` requests `User.Read.All`.
+  - `Get-M365UserSummary` requests `User.Read.All`, `GroupMember.Read.All`, `UserAuthenticationMethod.Read.All` and `AuditLog.Read.All`. Sign-in activity also needs Entra ID P1.
+- **Exchange commands:** `ExchangeOnlineManagement`. The large-sent-messages section of `Get-M365MailboxSpaceReport` needs version 3.7.0+ (`Get-MessageTraceV2`).
+
+### Network
+
+| Command | Description |
+|---|---|
+| `Get-MerakiFirmware` | Exports Meraki device firmware versions and the latest available firmware per product type to CSV. |
+
+**Requires:** a Meraki Dashboard API key.
 
 ---
 
 ## Requirements
 
-**General**
+Area-specific requirements are listed with each area under [Commands](#commands).
 
 | Requirement | Details |
 |---|---|
@@ -48,26 +106,51 @@ Each command is a self-contained advanced function with comment-based help. Run 
 | **PowerShell** | Windows PowerShell 5.1 or PowerShell 7+ |
 | **Execution policy** | If imports are blocked, run `Set-ExecutionPolicy -Scope Process Bypass` in the current session |
 
-**Per area**
-
-| Area | Needs |
-|---|---|
-| **ActiveDirectory** | RSAT (the `ActiveDirectory` module) |
-| **HyperV** | Elevated session and the Hyper-V PowerShell module. `New-DebianVM` installs QEMU (`qemu-img`) and the Windows ADK Deployment Tools (`oscdimg`) via winget if they are missing. |
-| **Intune (Graph)** | `Microsoft.Graph.Authentication`. `Remove-IntuneDevice` requests `DeviceManagementManagedDevices.ReadWrite.All`, plus `DeviceManagementServiceConfig.ReadWrite.All` for Autopilot and `Device.ReadWrite.All` for Entra ID. The signed-in account needs a role that can delete these records (for example Intune Administrator). |
-| **M365 (Graph)** | `Microsoft.Graph.Authentication`. `Disable-M365User` also needs `Microsoft.Graph.Users`, `Microsoft.Graph.Users.Actions` and `Microsoft.Graph.Groups`. `Get-M365LicenseActivity` requests `User.Read.All`, `AuditLog.Read.All` and `Organization.Read.All` (sign-in activity also needs Entra ID P1). `Get-M365PasswordLastSet` requests `User.Read.All`. `Get-M365UserSummary` requests `User.Read.All`, `GroupMember.Read.All`, `UserAuthenticationMethod.Read.All` and `AuditLog.Read.All` (sign-in activity also needs Entra ID P1). |
-| **M365 (Exchange)** | `ExchangeOnlineManagement`. The large-sent-messages section of `Get-M365MailboxSpaceReport` needs version 3.7.0+ (`Get-MessageTraceV2`). |
-| **Network** | A Meraki Dashboard API key |
-
+Missing modules are detected at run time, and you'll be asked whether to install them from the PowerShell Gallery.
 
 ---
 
 ## Usage examples
 
+**Active Directory & Microsoft 365 leavers**
+
+```powershell
+# Hybrid leaver: on-prem AD first, then Microsoft 365
+Disable-ADUser -Identity jdoe -ResetPassword -HideFromAddressList -TargetOU 'OU=Disabled Users,DC=contoso,DC=com'
+Disable-M365User -UserPrincipalName jdoe@contoso.com -ManagerUserPrincipalName manager@contoso.com
+
+# Bulk AD deprovisioning from CSV (preview first)
+Import-Csv .\leavers.csv | Disable-ADUser -WhatIf
+```
+
+**File System**
+
 ```powershell
 # Disk usage
 Get-DiskUsageReport -Path D:\Shares -Top 25
+```
 
+**Hyper-V**
+
+```powershell
+# Debian VM on Hyper-V
+$pw = Read-Host -AsSecureString -Prompt 'Root password'
+New-DebianVM -Name web01 -CpuCount 2 -MemoryGB 4 -DiskGB 40 -RootPassword $pw
+```
+
+**Intune**
+
+```powershell
+# Preview removing a device from Intune, Autopilot and Entra ID
+Remove-IntuneDevice -SerialNumber 5CG1234ABC -Hostname LAPTOP-042 -IncludeEntra -WhatIf
+
+# Retire a batch of devices from a CSV (SerialNumber, Hostname columns) without prompting, saving the results
+Remove-IntuneDevice -CsvPath .\retired.csv -IncludeEntra -Force | Export-Csv .\retired-results.csv -NoTypeInformation
+```
+
+**Microsoft 365**
+
+```powershell
 # Quick overview of a user (account, password, licenses, mailbox access, out-of-office...)
 Get-M365UserSummary -Identity user@contoso.com
 
@@ -100,21 +183,4 @@ Get-M365MailboxSpaceReport -Identity user@contoso.com -Days 30 -MinimumSizeMB 10
 
 # Rooms in a specific location
 Get-M365RoomList -Name '*Dallas*' | Get-M365Room
-
-# Hybrid leaver: on-prem AD first, then Microsoft 365
-Disable-ADUser -Identity jdoe -ResetPassword -HideFromAddressList -TargetOU 'OU=Disabled Users,DC=contoso,DC=com'
-Disable-M365User -UserPrincipalName jdoe@contoso.com -ManagerUserPrincipalName manager@contoso.com
-
-# Bulk AD deprovisioning from CSV (preview first)
-Import-Csv .\leavers.csv | Disable-ADUser -WhatIf
-
-# Preview removing a device from Intune, Autopilot and Entra ID
-Remove-IntuneDevice -SerialNumber 5CG1234ABC -Hostname LAPTOP-042 -IncludeEntra -WhatIf
-
-# Retire a batch of devices from a CSV (SerialNumber, Hostname columns) without prompting, saving the results
-Remove-IntuneDevice -CsvPath .\retired.csv -IncludeEntra -Force | Export-Csv .\retired-results.csv -NoTypeInformation
-
-# Debian VM on Hyper-V
-$pw = Read-Host -AsSecureString -Prompt 'Root password'
-New-DebianVM -Name web01 -CpuCount 2 -MemoryGB 4 -DiskGB 40 -RootPassword $pw
 ```
