@@ -1,8 +1,19 @@
 # Changelog
 
-## [Unreleased]
+## [0.7.0]
 
 ### Added
+- Intune: `Remove-IntuneDevice`. Removes devices from Intune by serial number,
+  with an optional hostname safety check. `-IncludeAutopilot` also deregisters
+  the device from Windows Autopilot, and `-IncludeEntra` also deletes the Entra
+  ID device (and implies `-IncludeAutopilot`). Records are removed in the order
+  Microsoft recommends (Intune, Autopilot, Entra ID); the Entra step only runs
+  once the Autopilot identity is confirmed gone. `-TimeoutSeconds` (default
+  600) is one shared limit for the whole run's Autopilot wait, whether one
+  device or a batch, and covers retrying deletes Autopilot has not accepted yet.
+  Accepts a CSV (`-CsvPath`) or pipeline input for batches, supports `-WhatIf` /
+  `-Confirm` / `-Force`, skips synced (hybrid joined) Entra devices, and outputs
+  a result object per device.
 - Command reference in `docs/`, one Markdown page per command, grouped by
   category (`docs/<Category>/<Command>.md`), with an index at
   `docs/README.md`. Pages are generated from each command's comment-based help
@@ -19,21 +30,6 @@
   requirements and getting help. Per-command tables and the Graph permissions
   table were removed; that detail now lives in each command's help and in
   `docs/`.
-
-## [0.7.0]
-
-### Added
-- Intune: `Remove-IntuneDevice`. Removes devices from Intune by serial number,
-  with an optional hostname safety check. `-IncludeAutopilot` also deregisters
-  the device from Windows Autopilot, and `-IncludeEntra` also deletes the Entra
-  ID device (and implies `-IncludeAutopilot`). Records are removed in the order
-  Microsoft recommends (Intune, Autopilot, Entra ID); the Entra step only runs
-  once the Autopilot identity is confirmed gone. `-TimeoutSeconds` (default
-  600) is one shared limit for the whole run's Autopilot wait, whether one
-  device or a batch, and covers retrying deletes Autopilot has not accepted yet.
-  Accepts a CSV (`-CsvPath`) or pipeline input for batches, supports `-WhatIf` /
-  `-Confirm` / `-Force`, skips synced (hybrid joined) Entra devices, and outputs
-  a result object per device.
 
 ## [0.6.0]
 
