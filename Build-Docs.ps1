@@ -6,9 +6,9 @@
 .DESCRIPTION
     Imports the PSTools module from src\PSTools and uses
     Microsoft.PowerShell.PlatyPS to write one Markdown page per command to
-    docs\<Area>\<Command>.md. The area is the Public\<Area>\ subfolder the
-    command's file lives in. Also writes docs\README.md, an index of all
-    commands grouped by area.
+    docs\<Category>\<Command>.md. The category is the Public\<Category>\
+    subfolder the command's file lives in. Also writes docs\README.md, an
+    index of all commands grouped by category.
 
     The docs\ folder is fully regenerated on every run. Do not hand-edit
     files in it; change the function's comment-based help instead.
@@ -40,8 +40,8 @@ $moduleRoot   = Join-Path $repoRoot 'src' 'PSTools'
 $manifestPath = Join-Path $moduleRoot 'PSTools.psd1'
 $publicPath   = Join-Path $moduleRoot 'Public'
 
-# Friendly names for area folders. Folders not listed use their folder name.
-$areaNames = @{
+# Friendly names for category folders. Folders not listed use their folder name.
+$categoryNames = @{
     ActiveDirectory = 'Active Directory'
     FileSystem      = 'File System'
     HyperV          = 'Hyper-V'
@@ -97,8 +97,8 @@ try {
         $name = $file.BaseName
 
         $relative = [IO.Path]::GetRelativePath($publicPath, $file.DirectoryName)
-        $area = if ($relative -eq '.') { 'General' }
-                else { $relative.Split([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)[0] }
+        $category = if ($relative -eq '.') { 'General' }
+                    else { $relative.Split([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)[0] }
 
         $command = Get-Command -Module 'PSTools' -Name $name -ErrorAction SilentlyContinue
         if (-not $command) {
@@ -120,11 +120,11 @@ try {
             $incomplete.Add($name)
         }
 
-        $areaPath = Join-Path $OutputPath $area
-        if (-not (Test-Path -Path $areaPath)) {
-            $null = New-Item -Path $areaPath -ItemType Directory
+        $categoryPath = Join-Path $OutputPath $category
+        if (-not (Test-Path -Path $categoryPath)) {
+            $null = New-Item -Path $categoryPath -ItemType Directory
         }
-        Set-Content -Path (Join-Path $areaPath "$name.md") -Value $text -NoNewline -Encoding utf8NoBOM
+        Set-Content -Path (Join-Path $categoryPath "$name.md") -Value $text -NoNewline -Encoding utf8NoBOM
 
         # Synopsis for the index. Functions without help return their syntax here.
         $synopsis = ((Get-Help -Name $name).Synopsis -replace '\s+', ' ').Trim()
@@ -132,12 +132,12 @@ try {
         $synopsis = $synopsis -replace '\|', '\|'
 
         $entries.Add([pscustomobject]@{
-            Area     = $area
+            Category = $category
             Name     = $name
             Synopsis = $synopsis
         })
 
-        Write-Verbose "Generated $area/$name.md"
+        Write-Verbose "Generated $category/$name.md"
     }
 }
 finally {
@@ -150,14 +150,14 @@ $lines = [System.Collections.Generic.List[string]]::new()
 $lines.Add('# PSTools command reference')
 $lines.Add('')
 
-foreach ($group in ($entries | Group-Object -Property Area | Sort-Object -Property Name)) {
-    $title = if ($areaNames.ContainsKey($group.Name)) { $areaNames[$group.Name] } else { $group.Name }
+foreach ($group in ($entries | Group-Object -Property Category | Sort-Object -Property Name)) {
+    $title = if ($categoryNames.ContainsKey($group.Name)) { $categoryNames[$group.Name] } else { $group.Name }
     $lines.Add("## $title")
     $lines.Add('')
     $lines.Add('| Command | Synopsis |')
     $lines.Add('|---|---|')
     foreach ($entry in ($group.Group | Sort-Object -Property Name)) {
-        $lines.Add("| [$($entry.Name)]($($entry.Area)/$($entry.Name).md) | $($entry.Synopsis) |")
+        $lines.Add("| [$($entry.Name)]($($entry.Category)/$($entry.Name).md) | $($entry.Synopsis) |")
     }
     $lines.Add('')
 }

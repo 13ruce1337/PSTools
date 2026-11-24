@@ -3,10 +3,10 @@
 ## [Unreleased]
 
 ### Added
-- Command reference in `docs/`, one Markdown page per command, grouped by area
-  (`docs/<Area>/<Command>.md`), with an index at `docs/README.md`. Pages are
-  generated from each command's comment-based help with
-  `Microsoft.PowerShell.PlatyPS`, so the help is the single source.
+- Command reference in `docs/`, one Markdown page per command, grouped by
+  category (`docs/<Category>/<Command>.md`), with an index at
+  `docs/README.md`. Pages are generated from each command's comment-based help
+  with `Microsoft.PowerShell.PlatyPS`, so the help is the single source.
 - `Build-Docs.ps1`: generates `docs/`. Fails if the files in `Public\`
   and `FunctionsToExport` in `PSTools.psd1` are out of sync, and warns about
   commands with incomplete help.
@@ -15,7 +15,7 @@
   with the regenerated docs.
 
 ### Changed
-- README restructured: intro, installation, areas (linking to `docs/`),
+- README restructured: intro, installation, categories (linking to `docs/`),
   requirements and getting help. Per-command tables and the Graph permissions
   table were removed; that detail now lives in each command's help and in
   `docs/`.

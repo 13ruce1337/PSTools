@@ -20,9 +20,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ---
 
-## Areas
+## Categories
 
-Each area links to its command reference in [`docs/`](docs/README.md).
+Each category links to its command reference in [`docs/`](docs/README.md).
 
 - **[Active Directory](docs/ActiveDirectory/)**: User deprovisioning for on-premises AD. Requires RSAT (the `ActiveDirectory` module).
 - **[File System](docs/FileSystem/)**: Disk usage reports. No extra requirements.
