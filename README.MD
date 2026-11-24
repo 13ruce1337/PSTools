@@ -10,13 +10,11 @@ Import-Module .\PSTools\src\PSTools\PSTools.psd1
 Get-Command -Module PSTools
 ```
 
-> **Note:** Windows blocks scripts by default, so `Import-Module` may fail with *"running scripts is disabled on this system"*. The fastest fix is to allow scripts for the current terminal window only, then run the import again:
->
-> ```powershell
-> Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-> ```
+> **Note:** If the import fails with *"running scripts is disabled on this system"*, change the execution policy for the current terminal only:
 
-To make it available in every session, copy `src\PSTools` into a folder on your `$env:PSModulePath`, for example `$HOME\Documents\PowerShell\Modules\PSTools`. Then run `Import-Module PSTools`.
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
 
 ---
 
