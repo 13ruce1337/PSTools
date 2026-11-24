@@ -20,7 +20,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ## Commands
 
-Each command is a self-contained advanced function with comment-based help. The descriptions below are summaries. Run `Get-Help <Command> -Full` for parameters, details and examples.
+Each command is a self-contained advanced function with comment-based help. The descriptions below are summaries. See [Getting help](#getting-help) for parameters and examples.
 
 **Areas:** [Active Directory](#active-directory) · [File System](#file-system) · [Hyper-V](#hyper-v) · [Intune](#intune) · [Microsoft 365](#microsoft-365) · [Network](#network)
 
@@ -122,77 +122,19 @@ Graph commands sign in with `Microsoft.Graph.Authentication` and request the per
 
 ---
 
-## Usage examples
+## Getting help
 
-**Active Directory & Microsoft 365 leavers**
-
-```powershell
-# Hybrid leaver: on-prem AD first, then Microsoft 365
-Disable-ADUser -Identity jdoe -ResetPassword -HideFromAddressList -TargetOU 'OU=Disabled Users,DC=contoso,DC=com'
-Disable-M365User -UserPrincipalName jdoe@contoso.com -ManagerUserPrincipalName manager@contoso.com
-
-# Bulk AD deprovisioning from CSV (preview first)
-Import-Csv .\leavers.csv | Disable-ADUser -WhatIf
-```
-
-**File System**
+Every command includes built-in help with parameters and examples:
 
 ```powershell
-# Disk usage
-Get-DiskUsageReport -Path D:\Shares -Top 25
+# List all commands in the module
+Get-Command -Module PSTools
+
+# Show usage examples for a command
+Get-Help Remove-IntuneDevice -Examples
+
+# Show full help, including every parameter
+Get-Help Remove-IntuneDevice -Full
 ```
 
-**Hyper-V**
-
-```powershell
-# Debian VM on Hyper-V
-$pw = Read-Host -AsSecureString -Prompt 'Root password'
-New-DebianVM -Name web01 -CpuCount 2 -MemoryGB 4 -DiskGB 40 -RootPassword $pw
-```
-
-**Intune**
-
-```powershell
-# Preview removing a device from Intune, Autopilot and Entra ID
-Remove-IntuneDevice -SerialNumber 5CG1234ABC -Hostname LAPTOP-042 -IncludeEntra -WhatIf
-
-# Retire a batch of devices from a CSV (SerialNumber, Hostname columns) without prompting, saving the results
-Remove-IntuneDevice -CsvPath .\retired.csv -IncludeEntra -Force | Export-Csv .\retired-results.csv -NoTypeInformation
-```
-
-**Microsoft 365**
-
-```powershell
-# Quick overview of a user (account, password, licenses, mailbox access, out-of-office...)
-Get-M365UserSummary -Identity user@contoso.com
-
-# The 30 users with the oldest passwords
-Get-M365PasswordLastSet
-
-# Password last set for one user
-Get-M365PasswordLastSet -Identity user@contoso.com
-
-# Top 50 enabled accounts by password age, with the full list exported to C:\Reports
-Get-M365PasswordLastSet -Top 50 -EnabledOnly -OutputPath C:\Reports
-
-# Active accounts whose password is over a year old
-Get-M365PasswordLastSet -PassThru | Where-Object { $_.IsActive -and $_.PasswordAgeDays -gt 365 } | Format-Table
-
-# Licensed users with no sign-in in the last 30 days
-Get-M365LicenseActivity
-
-# Same with a 90-day threshold, including disabled accounts, exported to C:\Reports
-Get-M365LicenseActivity -DaysInactive 90 -IncludeDisabled -OutputPath C:\Reports
-
-# Group membership, including nested groups, exported to CSV
-Get-M365GroupMember -GroupName 'All Staff' -Transitive -Export
-
-# Admin MFA posture: show only admins without strong MFA
-Get-M365AdminMfaReport -NoExport | Where-Object MfaStatus -notin 'Enabled', 'Phishing-resistant'
-
-# Mailbox space investigation
-Get-M365MailboxSpaceReport -Identity user@contoso.com -Days 30 -MinimumSizeMB 10
-
-# Rooms in a specific location
-Get-M365RoomList -Name '*Dallas*' | Get-M365Room
-```
+Commands that make changes support `-WhatIf`, so you can preview what they'll do before running them for real.
