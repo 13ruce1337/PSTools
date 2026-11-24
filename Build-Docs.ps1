@@ -15,6 +15,10 @@
     built in a staging folder first, so docs\ is only replaced if every page
     builds.
 
+    The YAML front matter PlatyPS adds to each page is removed. It is only
+    needed to convert the Markdown back into MAML help, which this repo does
+    not do, and GitHub shows it as a table at the top of every page.
+
     The build fails if the files in Public\ and FunctionsToExport in
     PSTools.psd1 are out of sync. It warns about commands whose help is
     incomplete (PlatyPS placeholders in the output).
@@ -120,9 +124,11 @@ try {
             throw "PlatyPS did not produce a page for '$name'."
         }
 
-        # Normalize line endings and drop ms.date so unchanged help produces no diff.
+        # Normalize line endings, then drop the YAML front matter (PlatyPS
+        # metadata, including ms.date) so the page starts at its heading and
+        # unchanged help produces no diff.
         $text = (Get-Content -Path $generated.FullName -Raw) -replace "`r`n", "`n"
-        $text = $text -replace '(?m)^ms\.date:.*\n', ''
+        $text = $text -replace '(?s)\A---\n.*?\n---\n\s*', ''
 
         if ($text -match '\{\{ Fill') {
             $incomplete.Add($name)
