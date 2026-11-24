@@ -1,13 +1,3 @@
----
-document type: cmdlet
-external help file: PSTools-Help.xml
-HelpUri: https://developer.cisco.com/meraki/api-v1/
-Locale: en-US
-Module Name: PSTools
-PlatyPS schema version: 2024-05-01
-title: Get-MerakiFirmware
----
-
 # Get-MerakiFirmware
 
 ## SYNOPSIS
