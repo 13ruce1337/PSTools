@@ -11,7 +11,9 @@
     index of all commands grouped by category.
 
     The docs\ folder is fully regenerated on every run. Do not hand-edit
-    files in it; change the function's comment-based help instead.
+    files in it; change the function's comment-based help instead. Pages are
+    built in a staging folder first, so docs\ is only replaced if every page
+    builds.
 
     The build fails if the files in Public\ and FunctionsToExport in
     PSTools.psd1 are out of sync. It warns about commands whose help is
@@ -81,13 +83,13 @@ Import-Module -Name $manifestPath -Force
 
 # --- Generate pages ---------------------------------------------------------
 
-$staging = Join-Path ([IO.Path]::GetTempPath()) ("PSTools-docs-" + [guid]::NewGuid().ToString('N'))
-$null = New-Item -Path $staging -ItemType Directory
-
-if (Test-Path -Path $OutputPath) {
-    Remove-Item -Path $OutputPath -Recurse -Force
-}
-$null = New-Item -Path $OutputPath -ItemType Directory
+# $platyOut receives PlatyPS's raw output; $buildOut is the finished docs tree.
+# docs\ is only replaced once every page has been built.
+$staging  = Join-Path ([IO.Path]::GetTempPath()) ("PSTools-docs-" + [guid]::NewGuid().ToString('N'))
+$platyOut = Join-Path $staging 'platyps'
+$buildOut = Join-Path $staging 'docs'
+$null = New-Item -Path $platyOut -ItemType Directory
+$null = New-Item -Path $buildOut -ItemType Directory
 
 $entries    = [System.Collections.Generic.List[object]]::new()
 $incomplete = [System.Collections.Generic.List[string]]::new()
@@ -105,9 +107,15 @@ try {
             throw "Command '$name' was not found after importing PSTools. Check that '$($file.FullName)' defines a function with that name."
         }
 
-        $null = New-MarkdownCommandHelp -CommandInfo $command -OutputFolder $staging -Force
+        # PlatyPS reads help properties that may not exist (for example
+        # 'description' on a parameter without .PARAMETER help) and fails under
+        # strict mode. Run it in a child scope with strict mode off.
+        $null = & {
+            Set-StrictMode -Off
+            New-MarkdownCommandHelp -CommandInfo $command -OutputFolder $platyOut -Force
+        }
 
-        $generated = Get-ChildItem -Path $staging -Filter "$name.md" -File -Recurse | Select-Object -First 1
+        $generated = Get-ChildItem -Path $platyOut -Filter "$name.md" -File -Recurse | Select-Object -First 1
         if (-not $generated) {
             throw "PlatyPS did not produce a page for '$name'."
         }
@@ -120,7 +128,7 @@ try {
             $incomplete.Add($name)
         }
 
-        $categoryPath = Join-Path $OutputPath $category
+        $categoryPath = Join-Path $buildOut $category
         if (-not (Test-Path -Path $categoryPath)) {
             $null = New-Item -Path $categoryPath -ItemType Directory
         }
@@ -139,30 +147,38 @@ try {
 
         Write-Verbose "Generated $category/$name.md"
     }
+
+    # --- Index --------------------------------------------------------------
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add('# PSTools command reference')
+    $lines.Add('')
+
+    foreach ($group in ($entries | Group-Object -Property Category | Sort-Object -Property Name)) {
+        $title = if ($categoryNames.ContainsKey($group.Name)) { $categoryNames[$group.Name] } else { $group.Name }
+        $lines.Add("## $title")
+        $lines.Add('')
+        $lines.Add('| Command | Synopsis |')
+        $lines.Add('|---|---|')
+        foreach ($entry in ($group.Group | Sort-Object -Property Name)) {
+            $lines.Add("| [$($entry.Name)]($($entry.Category)/$($entry.Name).md) | $($entry.Synopsis) |")
+        }
+        $lines.Add('')
+    }
+
+    Set-Content -Path (Join-Path $buildOut 'README.md') -Value (($lines -join "`n").TrimEnd() + "`n") -NoNewline -Encoding utf8NoBOM
+
+    # --- Replace docs\ ------------------------------------------------------
+
+    if (Test-Path -Path $OutputPath) {
+        Remove-Item -Path $OutputPath -Recurse -Force
+    }
+    $null = New-Item -Path $OutputPath -ItemType Directory
+    Copy-Item -Path (Join-Path $buildOut '*') -Destination $OutputPath -Recurse -Force
 }
 finally {
     Remove-Item -Path $staging -Recurse -Force -ErrorAction SilentlyContinue
 }
-
-# --- Index ------------------------------------------------------------------
-
-$lines = [System.Collections.Generic.List[string]]::new()
-$lines.Add('# PSTools command reference')
-$lines.Add('')
-
-foreach ($group in ($entries | Group-Object -Property Category | Sort-Object -Property Name)) {
-    $title = if ($categoryNames.ContainsKey($group.Name)) { $categoryNames[$group.Name] } else { $group.Name }
-    $lines.Add("## $title")
-    $lines.Add('')
-    $lines.Add('| Command | Synopsis |')
-    $lines.Add('|---|---|')
-    foreach ($entry in ($group.Group | Sort-Object -Property Name)) {
-        $lines.Add("| [$($entry.Name)]($($entry.Category)/$($entry.Name).md) | $($entry.Synopsis) |")
-    }
-    $lines.Add('')
-}
-
-Set-Content -Path (Join-Path $OutputPath 'README.md') -Value (($lines -join "`n").TrimEnd() + "`n") -NoNewline -Encoding utf8NoBOM
 
 # --- Summary ----------------------------------------------------------------
 
