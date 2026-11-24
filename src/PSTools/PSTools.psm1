@@ -16,10 +16,10 @@
 # import time.
 #
 # Docs: docs\<Area>\<Command>.md is generated from the function's comment-based
-# help by build.ps1 (run by the Docs GitHub Action on push to main). Write
-# complete help (.SYNOPSIS, .DESCRIPTION, .EXAMPLE, and Graph permissions in
-# .NOTES) and do not edit docs\ by hand. A new Public\<Area>\ folder becomes a
-# new docs area automatically; add it to the Areas list in README.MD.
+# help by tools\Build-Docs.ps1 (run by the Docs GitHub Action on push to main).
+# Write complete help (.SYNOPSIS, .DESCRIPTION, .EXAMPLE, and Graph permissions
+# in .NOTES) and do not edit docs\ by hand. A new Public\<Area>\ folder becomes
+# a new docs area automatically; add it to the Areas list in README.MD.
 
 $privatePath = Join-Path $PSScriptRoot 'Private'
 $publicPath  = Join-Path $PSScriptRoot 'Public'

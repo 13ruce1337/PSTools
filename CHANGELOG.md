@@ -7,12 +7,12 @@
   (`docs/<Area>/<Command>.md`), with an index at `docs/README.md`. Pages are
   generated from each command's comment-based help with
   `Microsoft.PowerShell.PlatyPS`, so the help is the single source.
-- `build.ps1`: generates `docs/`. Fails if the files in `Public\` and
-  `FunctionsToExport` in `PSTools.psd1` are out of sync, and warns about
+- `tools/Build-Docs.ps1`: generates `docs/`. Fails if the files in `Public\`
+  and `FunctionsToExport` in `PSTools.psd1` are out of sync, and warns about
   commands with incomplete help.
 - GitHub Action (`.github/workflows/docs.yml`): on pushes to `main` that change
-  the module, runs `build.ps1` and opens or updates a pull request with the
-  regenerated docs.
+  the module, runs `tools/Build-Docs.ps1` and opens or updates a pull request
+  with the regenerated docs.
 
 ### Changed
 - README restructured: intro, installation, areas (linking to `docs/`),
