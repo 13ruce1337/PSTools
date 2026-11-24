@@ -21,10 +21,6 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 Import-Module .\PSTools\src\PSTools\PSTools.psd1
 ```
 
-This doesn't need admin rights and doesn't change any system settings. It only lasts until you close that window, so you'll need to run it again in each new session.
-
-For a lasting setting, `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` allows local scripts for your user account. If the files were downloaded as a ZIP rather than cloned, you may also need to run `Get-ChildItem -Recurse .\PSTools | Unblock-File`.
-
 ---
 
 ## Commands
