@@ -10,16 +10,13 @@ Import-Module .\PSTools\src\PSTools\PSTools.psd1
 Get-Command -Module PSTools
 ```
 
+> **Note:** Windows blocks scripts by default, so `Import-Module` may fail with *"running scripts is disabled on this system"*. The fastest fix is to allow scripts for the current terminal window only, then run the import again:
+>
+> ```powershell
+> Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+> ```
+
 To make it available in every session, copy `src\PSTools` into a folder on your `$env:PSModulePath`, for example `$HOME\Documents\PowerShell\Modules\PSTools`. Then run `Import-Module PSTools`.
-
-### If the import is blocked (execution policy)
-
-Windows blocks scripts by default, so `Import-Module` may fail with *"running scripts is disabled on this system"*. The fastest fix is to allow scripts for the current terminal window only:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-Import-Module .\PSTools\src\PSTools\PSTools.psd1
-```
 
 ---
 
@@ -115,7 +112,7 @@ These apply to every command. Area-specific requirements are listed at the top o
 |---|---|
 | **OS** | Windows 10 / 11 |
 | **PowerShell** | Windows PowerShell 5.1 or PowerShell 7+ |
-| **Execution policy** | Scripts must be allowed to run. See [If the import is blocked](#if-the-import-is-blocked-execution-policy) |
+| **Execution policy** | Scripts must be allowed to run. See the note under [Installation](#installation) |
 
 Missing modules are detected at run time, and you'll be asked whether to install them from the PowerShell Gallery.
 
