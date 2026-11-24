@@ -26,7 +26,7 @@ Each command is a self-contained advanced function with comment-based help. The 
 
 ### Active Directory
 
-> **Requires:** RSAT (the `ActiveDirectory` module).
+Requires RSAT (the `ActiveDirectory` module).
 
 | Command | Description |
 |---|---|
@@ -34,7 +34,7 @@ Each command is a self-contained advanced function with comment-based help. The 
 
 ### File System
 
-> **Requires:** nothing beyond the general [requirements](#requirements).
+No extra requirements.
 
 | Command | Description |
 |---|---|
@@ -42,7 +42,7 @@ Each command is a self-contained advanced function with comment-based help. The 
 
 ### Hyper-V
 
-> **Requires:** an elevated session and the Hyper-V PowerShell module. `New-DebianVM` installs QEMU (`qemu-img`) and the Windows ADK Deployment Tools (`oscdimg`) via winget if they are missing.
+Run from an elevated session with the Hyper-V PowerShell module installed. `New-DebianVM` also uses QEMU and the Windows ADK, and installs them via winget if they're missing.
 
 | Command | Description |
 |---|---|
@@ -51,7 +51,7 @@ Each command is a self-contained advanced function with comment-based help. The 
 
 ### Intune
 
-> **Requires:** `Microsoft.Graph.Authentication`. Requests `DeviceManagementManagedDevices.ReadWrite.All`, plus `DeviceManagementServiceConfig.ReadWrite.All` for Autopilot and `Device.ReadWrite.All` for Entra ID. The signed-in account needs a role that can delete these records (for example Intune Administrator).
+Uses Microsoft Graph. Your account needs a role that can delete devices, such as Intune Administrator. See [Permissions](#permissions) for details.
 
 | Command | Description |
 |---|---|
@@ -59,14 +59,7 @@ Each command is a self-contained advanced function with comment-based help. The 
 
 ### Microsoft 365
 
-> **Requires** (applies to all Microsoft 365 commands below):
->
-> - **Graph commands:** `Microsoft.Graph.Authentication`.
->   - `Disable-M365User` also needs `Microsoft.Graph.Users`, `Microsoft.Graph.Users.Actions` and `Microsoft.Graph.Groups`.
->   - `Get-M365License` requests `User.Read.All`, `AuditLog.Read.All` and `Organization.Read.All`. Sign-in activity also needs Entra ID P1.
->   - `Get-M365PasswordLastSet` requests `User.Read.All`.
->   - `Get-M365User` requests `User.Read.All`, `GroupMember.Read.All`, `UserAuthenticationMethod.Read.All` and `AuditLog.Read.All`. Sign-in activity also needs Entra ID P1.
-> - **Exchange commands:** `ExchangeOnlineManagement`. The large-sent-messages section of `Get-M365MailboxSpaceReport` needs version 3.7.0+ (`Get-MessageTraceV2`).
+Uses Microsoft Graph and Exchange Online. Missing modules are offered for install the first time you run a command, and you'll be asked to sign in. See [Permissions](#permissions) for details.
 
 #### Users
 
@@ -94,7 +87,7 @@ Each command is a self-contained advanced function with comment-based help. The 
 
 ### Network
 
-> **Requires:** a Meraki Dashboard API key.
+Requires a Meraki Dashboard API key.
 
 | Command | Description |
 |---|---|
@@ -113,6 +106,19 @@ These apply to every command. Area-specific requirements are listed at the top o
 | **Execution policy** | Scripts must be allowed to run. See the note under [Installation](#installation) |
 
 Missing modules are detected at run time, and you'll be asked whether to install them from the PowerShell Gallery.
+
+### Permissions
+
+Graph commands sign in with `Microsoft.Graph.Authentication` and request the permissions below. You'll see them on the consent prompt the first time you sign in. Most only request read access.
+
+| Command | Graph permissions | Notes |
+|---|---|---|
+| `Remove-IntuneDevice` | `DeviceManagementManagedDevices.ReadWrite.All`, plus `DeviceManagementServiceConfig.ReadWrite.All` for Autopilot and `Device.ReadWrite.All` for Entra ID | Needs a role that can delete these records, such as Intune Administrator |
+| `Get-M365User` | `User.Read.All`, `GroupMember.Read.All`, `UserAuthenticationMethod.Read.All`, `AuditLog.Read.All` | Sign-in activity needs Entra ID P1 |
+| `Get-M365License` | `User.Read.All`, `AuditLog.Read.All`, `Organization.Read.All` | Sign-in activity needs Entra ID P1 |
+| `Get-M365PasswordLastSet` | `User.Read.All` | |
+
+`Disable-M365User` also uses the `Microsoft.Graph.Users`, `Microsoft.Graph.Users.Actions` and `Microsoft.Graph.Groups` modules. Exchange Online commands use `ExchangeOnlineManagement`. The large-sent-messages section of `Get-M365MailboxSpaceReport` needs version 3.7.0 or later.
 
 ---
 
