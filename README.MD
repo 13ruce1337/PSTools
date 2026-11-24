@@ -1,6 +1,6 @@
 # PSTools — PowerShell IT Toolkit
 
-PSTools is a PowerShell module of IT admin commands for on-premises Active Directory, Microsoft 365, Intune, Hyper-V, file systems and networking. Each command is a self-contained advanced function with built-in help.
+A PowerShell module of IT admin commands, grouped by category, each with built-in help.
 
 ## Installation
 
