@@ -1,0 +1,55 @@
+name: Docs
+
+# Regenerates docs/ from the module's comment-based help and opens (or
+# updates) a pull request with the changes. Merging that PR only touches
+# docs/, which is not in the path filter, so it does not re-trigger this.
+#
+# Requires: Settings > Actions > General > Workflow permissions >
+# "Allow GitHub Actions to create and approve pull requests".
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/PSTools/**'
+      - 'build.ps1'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: docs
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: windows-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install Microsoft.PowerShell.PlatyPS
+        shell: pwsh
+        run: |
+          Install-PSResource -Name Microsoft.PowerShell.PlatyPS -Version '[1.0.0, 2.0.0)' -Scope CurrentUser -TrustRepository
+
+      - name: Generate docs
+        shell: pwsh
+        run: ./build.ps1
+
+      - name: Open pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: automation/update-docs
+          delete-branch: true
+          add-paths: docs/**
+          commit-message: 'docs: regenerate command reference'
+          title: 'docs: regenerate command reference'
+          body: |
+            Regenerated `docs/` from the module's comment-based help.
+
+            Triggered by ${{ github.sha }}. Review the generated pages, then merge.
+            To change the content, edit the function's comment-based help, not the files in `docs/`.

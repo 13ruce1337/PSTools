@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Command reference in `docs/`, one Markdown page per command, grouped by area
+  (`docs/<Area>/<Command>.md`), with an index at `docs/README.md`. Pages are
+  generated from each command's comment-based help with
+  `Microsoft.PowerShell.PlatyPS`, so the help is the single source.
+- `build.ps1`: generates `docs/`. Fails if the files in `Public\` and
+  `FunctionsToExport` in `PSTools.psd1` are out of sync, and warns about
+  commands with incomplete help.
+- GitHub Action (`.github/workflows/docs.yml`): on pushes to `main` that change
+  the module, runs `build.ps1` and opens or updates a pull request with the
+  regenerated docs.
+
+### Changed
+- README restructured: intro, installation, areas (linking to `docs/`),
+  requirements and getting help. Per-command tables and the Graph permissions
+  table were removed; that detail now lives in each command's help and in
+  `docs/`.
+
 ## [0.7.0]
 
 ### Added
