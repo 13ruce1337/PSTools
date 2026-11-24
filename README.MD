@@ -97,7 +97,7 @@ Requires a Meraki Dashboard API key.
 
 ## Requirements
 
-These apply to every command. Area-specific requirements are listed at the top of each area under [Commands](#commands).
+The table below applies to every command. Each area under [Commands](#commands) also has a short note on what it needs, and [Permissions](#permissions) lists the Graph permissions each command requests.
 
 | Requirement | Details |
 |---|---|
